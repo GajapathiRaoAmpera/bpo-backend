@@ -20,8 +20,11 @@ Role codes: SA super_admin, OM ops_manager, TL team_lead, HA human_agent, CM cam
 | `GET /policies/{policy_no}` | as customers | 3 |
 | `GET /dashboard/summary`, `/dashboard/trends` | SA, OM, TL, CM, QA, CO | 3 |
 | `GET /calls`, `GET /calls/{id}` | OM, TL, QA, SA, CM, BD, CO; HA own only | 3 |
-| `POST /voice/sessions` · `POST /voice/sessions/{id}/offer` · `/takeover` · `/end` | TL, HA (BD: test calls on drafts) | 2 |
-| `GET /voice/sessions/{id}/events` (SSE) | TL, HA, OM | 2 |
+| ✅ `GET /voice/queue` (renewals due soonest) | TL, HA | 2 |
+| ✅ `POST /voice/sessions` {mode, policy_id?} → call · `GET /voice/sessions/{id}` (transcript, customer, QA, flags) | TL, HA (owner; TL may read others) | 2 |
+| ✅ `POST` / `PATCH /voice/sessions/{id}/offer` (WebRTC SDP offer / ICE candidates, Pipecat SmallWebRTC) | TL, HA (owner) | 2 |
+| ✅ `POST /voice/sessions/{id}/takeover` · `POST /voice/sessions/{id}/end` {outcome?, note?} (outcome only after takeover) | TL, HA (owner) | 2 |
+| Bot studio test calls on draft scripts | BD | 4 |
 | `GET /live/calls` | TL, OM | 5 |
 | `GET /escalations` · `POST /escalations/{id}/claim`, `/resolve` | read TL, HA, OM · act TL, HA | 3 |
 | `GET /followups` · `POST /followups` · `PATCH /followups/{id}` | read TL, HA, CM, OM · write TL, HA, CM | 3 |

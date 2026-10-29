@@ -4,7 +4,8 @@ import tempfile
 # Must be set before the app (and its engine) is imported.
 _tmp = tempfile.mkdtemp()
 os.environ.update(JWT_SECRET="test-secret-" + "x" * 40, SEED_PASSWORD="Test@Pass1",
-                  DATABASE_URL=f"sqlite:///{_tmp}/test.db", FRONTEND_ORIGIN="http://localhost:3000")
+                  DATABASE_URL=f"sqlite:///{_tmp}/test.db", FRONTEND_ORIGIN="http://localhost:3000",
+                  GOOGLE_API_KEY="")  # never call Gemini from tests
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

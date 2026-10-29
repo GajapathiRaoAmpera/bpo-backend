@@ -15,10 +15,16 @@
 ## 3. Masking
 Masked roles (ops_manager, campaign_manager, qa_analyst, compliance_officer on customer data): phone `98XXXXXX21`, masked email, no date of birth, no search by phone. Masking happens in the API, never in the UI.
 
-## 4. Audit (append-only `audit_log`)
+## 4. Voice agent guardrails
+- Nothing about a policy is returned by any tool before `verify_customer` succeeds on this call (enforced in `services/voice_tools.py`, not just the prompt).
+- Renewal calls verify only the called customer; 3 failed attempts lock verification; the spoken DOB is not stored in tool payloads.
+- Only the agent who started a call can connect, take over or end it (others get 404).
+- Payment links are sandbox URLs; WhatsApp sends are recorded as follow-ups only.
+
+## 5. Audit (append-only `audit_log`)
 Recorded: login, failed login, logout, customer view, create/update/delete, submit, approve, reject, launch, export (the CSV export is itself audited), takeover, call start/end. Explicit `audit.record` for named actions; middleware catches any other successful authenticated write. Never log passwords, tokens, API keys or full PII in `detail`.
 
-## 5. Secrets and Environment
+## 6. Secrets and Environment
 | Variable | Private | Notes |
 |---|---|---|
 | `GOOGLE_API_KEY` | yes | Gemini; only in `.env` |
@@ -29,12 +35,12 @@ Recorded: login, failed login, logout, customer view, create/update/delete, subm
 | `COOKIE_SECURE` | no | true behind HTTPS |
 Only `.env.example` is committed. Never paste keys into prompts or chat.
 
-## 6. API Security
+## 7. API Security
 - Input validated by Pydantic (types, lengths, `EmailStr`, bounded pagination).
 - CORS: only `FRONTEND_ORIGIN`. The browser normally uses the same-origin Next.js rewrite.
 - Errors return a plain message; no stack traces or SQL in responses.
 - **Not done (sandbox):** login rate limiting / lockout. Add before any internet-facing deployment.
 
-## 7. Checklist
+## 8. Checklist
 - [x] Authentication · [x] Server-side authorization · [x] Server-side validation · [x] Secrets in env · [x] Masking · [x] Audit
 - [ ] Rate limiting (not in sandbox) · [ ] Alembic migrations before shared DB

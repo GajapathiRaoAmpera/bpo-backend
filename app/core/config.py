@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     frontend_origin: str = "http://localhost:3000"
     google_api_key: str = ""
     cookie_secure: bool = False
+    gemini_live_model: str = "models/gemini-3.8-live"
+    gemini_live_voice: str = "Kore"
+    gemini_flash_model: str = "gemini-3.8-flash"
+    # Tried in order when the primary returns 503/504 under peak demand.
+    gemini_flash_fallback_models: str = "gemini-3.5-flash,gemini-flash-latest"
 
     jwt_algorithm: str = "HS256"
     jwt_ttl_minutes: int = 8 * 60

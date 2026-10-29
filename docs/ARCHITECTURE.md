@@ -60,7 +60,27 @@ tests/         pytest
 | `UTCDateTime` column type | SQLite drops tzinfo; all stored times are UTC, shown in IST | Naive datetimes |
 | Money as integer rupees | No float rounding; premiums are whole rupees | Decimal/paise |
 
-## 9. Failure Scenarios
+## 9. Voice agent (Phase 2)
+```
+Console ──POST /voice/sessions──> Call row (in_progress) + LiveSession (in-memory registry)
+Console ──Pipecat JS client: POST/PATCH /voice/sessions/{id}/offer──> SmallWebRTCRequestHandler
+        └─ first offer spawns app/voice/bot.run_bot:
+           SmallWebRTCTransport.input → LLMUserAggregator(Silero VAD) → GeminiLiveLLMService(+5 tools)
+           → transport.output → LLMAssistantAggregator        (PipelineWorker + WorkerRunner, Pipecat 1.15)
+Tools ──> app/services/voice_tools.py (DB; guardrails in code) ──> tool TranscriptTurn + RTVI server message
+Turns ──> on_user_turn_message_added / on_assistant_turn_stopped ──> transcript_turns (offset = turn start)
+End/disconnect ──> voice/session.finalize (idempotent) ──> post_call.analyse_call (background)
+```
+- **Prompt** = latest approved script for the mode + call context (renewal: customer/policy as *unverified* context) + date/time in IST + tool rules.
+- **Guardrails in code:** policy tools refuse until `verify_customer` succeeds for this call; renewal calls can only verify the called customer; 3 failed attempts lock verification; spoken figures come from `*_spoken` tool fields.
+- **Takeover:** marks the call, stops the bot, the human wraps up with an outcome (+ link/callback created on their behalf) and a note.
+- **Post-call:** Gemini Flash (low thinking) returns `{summary, outcome, sentiment, next_action, qa}`; primary model then fallbacks, 3 rounds over ~1 min. Tool evidence and agent choice override the model's outcome; `identity_verified` comes from the call record. If every attempt fails, the call keeps a deterministic outcome and QA is left unscored (never faked).
+- **Models** (env): `GEMINI_LIVE_MODEL` (default `models/gemini-3.8-live`), `GEMINI_LIVE_VOICE`, `GEMINI_FLASH_MODEL`, `GEMINI_FLASH_FALLBACK_MODELS`.
+- shortcut: the live-session registry is in-process, so run one API worker; move it to Redis or a call service to scale out.
+
+## 10. Failure Scenarios
 - **DB unavailable:** request fails with 500; nothing partial is committed (one session per request).
-- **Gemini unavailable (Phase 2+):** call cannot start → clear error in the console; post-call analysis is retried / marked pending, transcript is still saved.
+- **Gemini Live unavailable:** the bot can't start; the console shows the connection error and the call is closed as no answer.
+- **Gemini Flash overloaded (503/504):** analysis retries across models; the console shows "Analysing" meanwhile; worst case the outcome comes from tool evidence and QA stays unscored.
+- **Browser closes mid-call:** WebRTC disconnect stops the bot and finalises the call; a never-connected call is closed when the agent starts the next one.
 - **Expired/invalid JWT:** 401; frontend redirects to `/login`.

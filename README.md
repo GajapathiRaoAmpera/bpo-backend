@@ -22,7 +22,8 @@ make test      # pytest
 | `DATABASE_URL` | Default `sqlite:///./assurevoice.db`; PostgreSQL URL works too |
 | `FRONTEND_ORIGIN` | CORS allow-list, default `http://localhost:3000` |
 | `COOKIE_SECURE` | `true` behind HTTPS |
-| `GOOGLE_API_KEY` | Gemini (Phase 2+) |
+| `GOOGLE_API_KEY` | Gemini Live voice agent and Gemini Flash post-call analysis |
+| `GEMINI_LIVE_MODEL`, `GEMINI_LIVE_VOICE`, `GEMINI_FLASH_MODEL`, `GEMINI_FLASH_FALLBACK_MODELS` | Optional model overrides (defaults in `.env.example`) |
 
 Docker: `docker build -t assurevoice-backend . && docker run --env-file .env -p 8000:8000 assurevoice-backend` (seeds on first start).
 
