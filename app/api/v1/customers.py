@@ -2,12 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.api.v1.calls import call_rows, visible_calls
+from app.api.v1.followups import followup_rows
 from app.core import audit
 from app.core.db import get_db
 from app.core.rbac import Access, Screen, require
-from app.models import Customer, Policy
+from app.models import Call, Customer, Followup, Policy
 from app.models.enums import AuditAction
-from app.schemas.customer import CustomerDetail, CustomerPage, CustomerRow, PolicyOut, customer_fields
+from app.schemas.calls import Customer360
+from app.schemas.customer import CustomerPage, CustomerRow, PolicyOut, customer_fields
 
 router = APIRouter(prefix="/customers", tags=["customers"])
 
@@ -37,13 +40,17 @@ def list_customers(
     return CustomerPage(items=items, total=total, page=page, page_size=page_size)
 
 
-@router.get("/{customer_id}", response_model=CustomerDetail)
+@router.get("/{customer_id}", response_model=Customer360)
 def get_customer(customer_id: int, request: Request, access: Access = Depends(require(Screen.customers)),
-                 db: Session = Depends(get_db)) -> CustomerDetail:
+                 db: Session = Depends(get_db)) -> Customer360:
     c = db.get(Customer, customer_id, options=[selectinload(Customer.policies)])
     if not c:
         raise HTTPException(404, "Customer not found")
     audit.record(db, request, AuditAction.view_customer, entity_type="customer", entity_id=c.id,
                  detail={"customer_code": c.customer_code, "masked": access.masked})
-    return CustomerDetail(**customer_fields(c, access.masked),
-                          policies=[PolicyOut.model_validate(p) for p in c.policies])
+    calls = db.scalars(visible_calls(select(Call).where(Call.customer_id == c.id), access.user)
+                       .order_by(Call.started_at.desc()).limit(20))
+    followups = db.scalars(select(Followup).where(Followup.customer_id == c.id).order_by(Followup.due_at.desc()).limit(20))
+    return Customer360(**customer_fields(c, access.masked),
+                       policies=[PolicyOut.model_validate(p) for p in c.policies],
+                       calls=call_rows(db, list(calls)), followups=followup_rows(db, list(followups)))

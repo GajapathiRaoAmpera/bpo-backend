@@ -33,5 +33,9 @@ Docker: `docker build -t assurevoice-backend . && docker run --env-file .env -p 
 ## Persona logins
 Emails `firstname.lastname@sandbox.assurevoice.in`, password `SEED_PASSWORD`. Full table and walkthrough in the bpo-frontend README.
 
+**Simulated in Phase 4:** launching a campaign places the next 3 simulated calls (synthetic transcript + AI QA score, `calls.is_simulated = true`); Bot Studio test calls are rule-based text previews of a draft (no model call, nothing saved).
+
+**Phase 3:** `/dashboard`, `/calls`, `/escalations` (claim/resolve), `/followups` and `/policies/{no}` endpoints; Customer 360 detail now includes the customer's calls and follow-ups. The follow-up timer (APScheduler, every 2 min, started with the app, not under tests) marks due follow-ups `sent` with a Gemini Flash or template WhatsApp message. **Simulated:** no WhatsApp message is ever delivered.
+
 ## Project docs
 `AGENTS.md` (agent rules) · `docs/PRD.md` · `docs/ARCHITECTURE.md` · `docs/DATABASE.md` · `docs/SECURITY.md` · `docs/API.md` · `docs/CODE_STYLE.md` · `docs/TESTING.md`.

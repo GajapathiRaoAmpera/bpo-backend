@@ -14,6 +14,12 @@ pytest + FastAPI `TestClient`. `tests/conftest.py` builds a temp SQLite DB and s
 | `test_maker_checker.py` | bot ignores pending scripts; approval switches the active script |
 | `test_audit.py` | middleware audits unaudited writes once; skips anonymous/failed writes |
 | `test_voice.py` | tool guardrails (no details before verify, lockout, cross-customer), parsing, outcome precedence, voice API RBAC/ownership, takeover + agent outcome, analysis with mocked Gemini |
+| `test_phase3_api.py` | dashboard/calls/escalations/followups RBAC (401/403), policy + call detail masking (incl. DOB in transcripts) and audit, HA own calls only (404 others), call filters, claim/resolve rules + audit, follow-up create/patch validation + audit |
+| `test_phase3_scheduler.py` | follow-up timer job called directly: due → sent with template, future untouched, Gemini only for fresh follow-ups, template fallback on Gemini failure |
+| `test_phase4_maker_checker.py` | campaign/script/approvals RBAC (401/403), draft-only edits, checklist + note rules, self-approval blocked, approval switches the active script, launch places 3 simulated calls and updates progress, audit entries |
+| `test_phase4_qa.py` | QA queue, override + lock (locked → 409), view roles can't write, DOB redacted in transcripts, audit |
+| `test_phase5_admin.py` | users/integrations SA-only, create/patch/deactivate audited, password hashed + never logged, self-deactivate/demote blocked, deactivated user can't sign in |
+| `test_phase5_audit_live.py` | audit + live RBAC, audit filters/pagination/422s, CSV export content + audited, live calls with masking |
 
 New endpoints add: success, unauthenticated (401), forbidden role (403), invalid input (422), and an audit assertion for named actions.
 

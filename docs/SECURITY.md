@@ -11,9 +11,11 @@
 - Wrong role → **403**. Not signed in → **401**.
 - `own` level (human_agent on calls): queries must filter by `agent_user_id == user.id`.
 - Maker-checker: makers (bot_designer, campaign_manager) can never approve; only ops_manager / compliance_officer can.
+- User admin (super_admin): users are deactivated, never deleted; deactivation takes effect on the user's next request. Nobody can deactivate themselves or change their own role.
+- Live monitor: masked roles (ops_manager) get masked phones and no customer speech in the transcript snippet.
 
 ## 3. Masking
-Masked roles (ops_manager, campaign_manager, qa_analyst, compliance_officer on customer data): phone `98XXXXXX21`, masked email, no date of birth, no search by phone. Masking happens in the API, never in the UI.
+Masked roles (ops_manager, campaign_manager, qa_analyst, compliance_officer on customer data): phone `98XXXXXX21`, masked email, no date of birth, no search by phone. Customer details shown with calls/escalations follow the role's Customer 360 level (roles without full customer access get masked data), and a spoken date of birth is replaced with `[date of birth]` in transcripts for those roles. Call-detail and policy views are audited as `view_customer`. Masking happens in the API, never in the UI.
 
 ## 4. Voice agent guardrails
 - Nothing about a policy is returned by any tool before `verify_customer` succeeds on this call (enforced in `services/voice_tools.py`, not just the prompt).

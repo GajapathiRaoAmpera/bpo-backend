@@ -78,7 +78,7 @@ Access levels: **full / view / approve / masked / own / none**. Enforced in the 
 - The bot always uses the latest approved script; launching a campaign runs 3 simulated calls and updates progress.
 
 ### Feature: Follow-ups (Phase 3)
-- APScheduler, 2-minute timer in the sandbox; WhatsApp message text generated with Gemini Flash; nothing is sent to real numbers.
+- APScheduler, 2-minute timer in the sandbox: due `scheduled` follow-ups become `sent` with WhatsApp-style text from Gemini Flash (fresh follow-ups only, to save quota) or a deterministic template; nothing is sent to real numbers. Team leads, human agents and campaign managers schedule, complete and cancel follow-ups; ops managers view.
 
 ## 7. Non-Goals
 - Real PSTN/SIP calling, real WhatsApp sends, real payments, real PAS/CRM/IRDAI integrations (shown as "Pilot integration").
@@ -107,7 +107,7 @@ Access levels: **full / view / approve / masked / own / none**. Enforced in the 
 - SQLite is adequate for the showcase; schema is portable to PostgreSQL.
 
 ## 12. Open Questions
-- Should the header search (in the designs) search customers only, or customers + policies + calls? (Decide in Phase 3.)
+- ~~Header search scope~~ **Decided (Phase 3): customers only** (name, customer code, policy no.; mobile only for unmasked roles), the same rules as `GET /customers`. Calls are searched on Call History.
 - Should super_admin see the executive dashboard as landing, or Users & roles? (Currently dashboard.)
 
 ## 13. Definition of Done (per phase)
