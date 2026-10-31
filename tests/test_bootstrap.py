@@ -31,6 +31,7 @@ def test_bootstrap_creates_admin_scripts_integrations(empty_db, monkeypatch):
     admin = empty_db.scalars(select(User)).one()
     assert (admin.email, admin.role, admin.job_title) == ("it.admin@insurer.in", Role.super_admin, "IT Administrator")
     assert verify_password(PW, admin.password_hash)
+    assert _count(empty_db, Script) == 2  # only the approved defaults, no demo draft
     assert {s.mode for s in empty_db.scalars(select(Script).where(Script.status == ApprovalStatus.approved))} \
         == {"inbound", "renewal"}
     assert _count(empty_db, Integration) > 0

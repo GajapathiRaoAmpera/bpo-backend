@@ -11,12 +11,12 @@ import os
 import sys
 
 from pydantic import EmailStr, TypeAdapter
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
-from app.models import AuditLog, User
-from app.models.enums import AuditAction, Role
+from app.models import AuditLog, Script, User
+from app.models.enums import ApprovalStatus, AuditAction, Role
 from app.schemas.users import MIN_PASSWORD_LEN
 from app.seed import _Gen
 
@@ -36,6 +36,8 @@ def bootstrap(db: Session, email: str, name: str, password: str, title: str = "I
     # scripts_() credits the seed personas as maker/checker; on a fresh install the admin is the only user.
     g.users = {r: admin for r in (Role.bot_designer, Role.ops_manager, Role.compliance_officer)}
     g.scripts_()
+    db.flush()
+    db.execute(delete(Script).where(Script.status == ApprovalStatus.pending))  # the seed's demo v2 draft
     g.integrations_()
     db.add(AuditLog(actor_user_id=admin.id, actor_role=admin.role, action=AuditAction.create,
                     entity_type="user", entity_id=str(admin.id),

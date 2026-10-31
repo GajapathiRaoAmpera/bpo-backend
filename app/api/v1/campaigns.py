@@ -3,6 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core import audit
+from app.core.config import get_settings
 from app.core.db import get_db, utcnow
 from app.core.rbac import Access, Level, Screen, require
 from app.models import Campaign, Script, User
@@ -117,6 +118,8 @@ def launch_campaign(campaign_id: int, request: Request, access: Access = Depends
     c = _get(db, campaign_id)
     if c.status not in (CampaignStatus.approved, CampaignStatus.running):
         raise HTTPException(409, "Only approved campaigns can be launched")
+    if get_settings().app_env == "production":  # never simulate calls on real data; real dialling is section 6b
+        raise HTTPException(409, "Real dialling is not set up yet")
     call_ids = svc.launch(db, c)
     audit.record(db, request, AuditAction.launch, entity_type="campaign", entity_id=c.id,
                  detail={"name": c.name, "simulated_calls": call_ids, "dialled": c.dialled})

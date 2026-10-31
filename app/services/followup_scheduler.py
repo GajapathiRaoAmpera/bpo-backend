@@ -74,7 +74,7 @@ def send_due_followups(db: Session, now: datetime | None = None) -> list[int]:
     for f in due:
         p, c = db.get(Policy, f.policy_id), db.get(Customer, f.customer_id)
         if f.kind == FollowupKind.payment_link and not f.payment_link_url:
-            f.payment_link_url = f"https://pay.sandbox.assurevoice.in/r/{p.policy_no.lower()}-f{f.id}"
+            f.payment_link_url = f"{get_settings().payment_link_base}/{p.policy_no.lower()}-f{f.id}"
         text = None
         # Only fresh follow-ups use Gemini: the seeded backlog would burn the Flash quota post-call analysis needs.
         if use_ai and now - f.due_at <= AI_FRESHNESS:

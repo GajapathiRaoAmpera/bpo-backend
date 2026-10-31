@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     app_env: Literal["sandbox", "production"] = "sandbox"
+    # Payments integration is still pilot: links are built here but nothing is payable yet.
+    payment_link_base: str = "https://pay.sandbox.assurevoice.in/r"
     jwt_secret: str
     seed_password: str
     database_url: str = "sqlite:///./assurevoice.db"

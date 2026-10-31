@@ -135,3 +135,13 @@ def test_campaign_wizard_approve_launch(login, db):
     assert camp["connected"] == sum(x.outcome != "no_answer" for x in calls)
     assert camp["converted"] == sum(x.outcome in ("renewed", "payment_link_sent") for x in calls)
     assert last_audit(db, AuditAction.launch).entity_id == str(c["id"])
+
+
+def test_production_never_simulates_launch(login, db, monkeypatch):
+    from types import SimpleNamespace
+    c = db.scalars(select(Campaign).where(Campaign.status == CampaignStatus.running)).first()
+    calls_before = db.scalar(select(func.count()).select_from(Call))
+    monkeypatch.setattr("app.api.v1.campaigns.get_settings", lambda: SimpleNamespace(app_env="production"))
+    r = login(R.campaign_manager).post(f"{API}/campaigns/{c.id}/launch")
+    assert r.status_code == 409 and "dialling" in r.json()["detail"]
+    assert db.scalar(select(func.count()).select_from(Call)) == calls_before

@@ -12,6 +12,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.db import utcnow
 from app.core.formatting import IST, format_date, format_inr
 from app.core.masking import mask_phone
@@ -161,7 +162,7 @@ def send_payment_link(db: Session, state: CallState, policy_no: str, created_by:
     if err:
         return _record(db, state, "send_payment_link", "Payment link refused: not verified", args, err)
     customer = db.get(Customer, p.customer_id)
-    url = f"https://pay.sandbox.assurevoice.in/r/{p.policy_no.lower()}-{state.call_id}"
+    url = f"{get_settings().payment_link_base}/{p.policy_no.lower()}-{state.call_id}"
     first = customer.full_name.split()[0]
     db.add(Followup(policy_id=p.id, customer_id=customer.id, call_id=state.call_id, kind=FollowupKind.payment_link,
                     due_at=utcnow(), reason="Payment link requested on call", status=FollowupStatus.sent,
@@ -171,7 +172,8 @@ def send_payment_link(db: Session, state: CallState, policy_no: str, created_by:
                     payment_link_url=url, created_by=created_by, sent_at=utcnow()))
     return _record(db, state, "send_payment_link", f"Payment link sent on WhatsApp for {p.policy_no}", args, {
         "ok": True, "sent_to": f"WhatsApp {mask_phone(customer.phone)}", "amount_spoken": format_inr(p.premium_inr),
-        "note": "Sandbox link; no real message or payment.",
+        "note": "Sandbox link; no real message or payment." if get_settings().app_env == "sandbox" else
+                "Pilot – link not payable and WhatsApp is not live: tell the customer a colleague will share the payment link.",
     })
 
 
