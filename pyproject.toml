@@ -23,6 +23,7 @@ faker = "40.44.0"
 pipecat-ai = {version = "1.15.0", extras = ["google", "silero", "webrtc"]}
 google-genai = "2.34.0"
 apscheduler = "3.11.3"
+psycopg = { version = "3.3.6", extras = ["binary"] }
 
 [tool.poetry.group.dev.dependencies]
 pytest = "9.2.0"

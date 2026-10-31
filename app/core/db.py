@@ -38,7 +38,8 @@ class Base(DeclarativeBase):
 
 def make_engine(url: str):
     is_sqlite = url.startswith("sqlite")
-    engine = create_engine(url, connect_args={"check_same_thread": False} if is_sqlite else {})
+    engine = create_engine(url, connect_args={"check_same_thread": False} if is_sqlite else {},
+                           pool_pre_ping=not is_sqlite)  # Supabase pooler drops idle connections
     if is_sqlite:
         @event.listens_for(engine, "connect")
         def _fk_on(dbapi_conn, _):

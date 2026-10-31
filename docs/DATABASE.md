@@ -3,7 +3,7 @@
 Source of truth for the data model: `app/models/__init__.py` and `app/models/enums.py`. Do not invent tables or fields; update this file when the schema changes.
 
 ## 1. Engine
-SQLite (`sqlite:///./assurevoice.db`) for the sandbox. Written to run on PostgreSQL by changing `DATABASE_URL` (no SQLite-only SQL; enums stored as strings).
+SQLite (`sqlite:///./assurevoice.db`) for the sandbox. PostgreSQL (e.g. Supabase, driver `psycopg`) by changing `DATABASE_URL` to `postgresql+psycopg://...`; no SQLite-only SQL, enums stored as strings.
 
 ## 2. Conventions
 - Tables: plural snake_case. Columns: snake_case. PK: `id` integer (except `qa_scores.call_id`).
