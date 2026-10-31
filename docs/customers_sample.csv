@@ -1,4 +1,4 @@
 customer_code,full_name,phone,email,dob,city,state,preferred_language,policy_no,product,plan_name,sum_insured_inr,premium_inr,status,start_date,renewal_date,vehicle_reg,consent
-TST-0001,Asha Tester,+91 98765 43210,asha.tester@example.com,1990-04-12,Chennai,Tamil Nadu,tamil,MOT-2026-900001,motor,Private Car Comprehensive,650000,14200,due,2025-11-20,2026-11-20,TN01AB1234,yes
-TST-0001,Asha Tester,+91 98765 43210,asha.tester@example.com,1990-04-12,Chennai,Tamil Nadu,tamil,HLT-2026-900002,health,Family Floater Silver,500000,18500,active,2026-01-05,2027-01-05,,yes
+TST-0001,Asha Tester,+91 9392546937,asha.tester@example.com,1990-04-12,Chennai,Tamil Nadu,tamil,MOT-2026-900001,motor,Private Car Comprehensive,650000,14200,due,2025-11-20,2026-11-20,TN01AB1234,yes
+TST-0003,Venkat Tester,+91 7337581429,venkatagajapathiraomugunda@gmail.com,1990-04-12,Chennai,Tamil Nadu,english,HLT-2026-900004,health,Family Floater Silver,500000,18500,active,2026-01-05,2027-01-05,,yes
 TST-0002,Ravi Tester,9123456780,ravi.tester@example.com,1985-09-30,Bengaluru,Karnataka,english,TRM-2026-900003,term_life,Term Shield 1Cr,10000000,"12,400",due,2025-12-01,2026-12-01,,yes

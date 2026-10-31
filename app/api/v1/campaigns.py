@@ -1,3 +1,4 @@
+import plivo
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -121,7 +122,11 @@ def launch_campaign(campaign_id: int, request: Request, access: Access = Depends
         raise HTTPException(409, "Only approved campaigns can be launched")
     s = get_settings()
     if s.plivo_enabled:
-        call_ids = svc.dial(db, c)
+        try:
+            call_ids = svc.dial(db, c)
+        except plivo.exceptions.AuthenticationError:  # raised before any call is placed
+            raise HTTPException(502, "Plivo rejected the credentials: check PLIVO_AUTH_ID (starts with MA or SA) "
+                                     "and PLIVO_AUTH_TOKEN") from None
     elif s.app_env == "production":  # never simulate calls on real data
         raise HTTPException(409, "Real dialling is not set up yet: set the PLIVO_* and PUBLIC_BASE_URL settings")
     else:
