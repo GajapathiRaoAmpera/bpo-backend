@@ -4,6 +4,7 @@ Source of truth for the data model: `app/models/__init__.py` and `app/models/enu
 
 ## 1. Engine
 SQLite (`sqlite:///./assurevoice.db`) for the sandbox. PostgreSQL (e.g. Supabase, driver `psycopg`) by changing `DATABASE_URL` to `postgresql+psycopg://...`; no SQLite-only SQL, enums stored as strings.
+To load the sandbox into a remote Postgres, seed SQLite and bulk-copy it: `DATABASE_URL=sqlite:///./assurevoice.db poetry run python -m app.seed && poetry run python -m scripts.copy_to_postgres` (the row-by-row seed is too slow over the network).
 
 ## 2. Conventions
 - Tables: plural snake_case. Columns: snake_case. PK: `id` integer (except `qa_scores.call_id`).
