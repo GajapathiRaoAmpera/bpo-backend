@@ -1,4 +1,4 @@
-.PHONY: setup dev reset test
+.PHONY: setup dev reset test migrate
 
 setup:            ## install deps, create .env if missing, seed the sandbox
 	poetry install --no-interaction
@@ -7,6 +7,9 @@ setup:            ## install deps, create .env if missing, seed the sandbox
 
 dev:              ## API on http://localhost:8000 (docs at /docs)
 	poetry run uvicorn app.main:app --reload --port 8000
+
+migrate:          ## apply database migrations (alembic upgrade head)
+	poetry run alembic upgrade head
 
 reset:            ## wipe and reseed all synthetic data
 	poetry run python -m app.seed
