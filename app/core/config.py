@@ -1,11 +1,14 @@
 from functools import lru_cache
+from typing import Literal
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    app_env: Literal["sandbox", "production"] = "sandbox"
     jwt_secret: str
     seed_password: str
     database_url: str = "sqlite:///./assurevoice.db"
@@ -21,6 +24,19 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_ttl_minutes: int = 8 * 60
     cookie_name: str = "av_session"
+
+    @model_validator(mode="after")
+    def _production_guard(self) -> "Settings":
+        # Refuse to start production with sandbox-grade settings.
+        if self.app_env == "production":
+            problems = [msg for bad, msg in (
+                (len(self.jwt_secret) < 32, "JWT_SECRET must be at least 32 characters"),
+                (not self.cookie_secure, "COOKIE_SECURE must be true"),
+                (self.database_url.startswith("sqlite"), "DATABASE_URL must not be SQLite"),
+            ) if bad]
+            if problems:
+                raise ValueError("APP_ENV=production: " + "; ".join(problems))
+        return self
 
 
 @lru_cache
