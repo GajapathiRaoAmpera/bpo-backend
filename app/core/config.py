@@ -28,6 +28,17 @@ class Settings(BaseSettings):
     cookie_name: str = "av_session"
     login_rate_limit: str = "5/minute"  # per client IP, slowapi syntax
 
+    # Real phone calls (Plivo). Numbers without "+", e.g. 918031234567. Unset = campaigns simulate calls.
+    plivo_auth_id: str = ""
+    plivo_auth_token: str = ""
+    plivo_from_number: str = ""
+    public_base_url: str = ""  # backend's public https URL that Plivo calls back, no trailing slash
+    contact_allowlist_prefix: str = ""  # e.g. "TST-": only customers whose code starts with it are dialled
+
+    @property
+    def plivo_enabled(self) -> bool:
+        return all((self.plivo_auth_id, self.plivo_auth_token, self.plivo_from_number, self.public_base_url))
+
     @model_validator(mode="after")
     def _production_guard(self) -> "Settings":
         # Refuse to start production with sandbox-grade settings.

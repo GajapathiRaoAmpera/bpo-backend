@@ -473,7 +473,7 @@ class _Gen:
             ("pas", "Policy Administration System", "Core insurance", pilot, "Sandbox uses the local policy database; production connects to PAS."),
             ("whatsapp", "WhatsApp Business API", "Messaging", pilot, "Messages are recorded as follow-ups; nothing is sent to real numbers."),
             ("payments", "Payment gateway (UPI / cards)", "Payments", pilot, "Generates sandbox payment links only."),
-            ("sip", "SIP telephony trunk", "Telephony", pilot, "Production PSTN calling; the sandbox uses browser WebRTC."),
+            ("sip", "Plivo telephony", "Telephony", pilot, "Real phone calls for campaigns once Plivo is configured; the agent console uses browser WebRTC."),
             ("crm", "CRM case sync", "CRM", pilot, "Escalations and follow-ups would sync as CRM cases."),
             ("bima_bharosa", "IRDAI Bima Bharosa", "Regulatory", pilot, "Grievance reference sync for complaints."),
         ]:

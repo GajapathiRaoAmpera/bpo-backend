@@ -14,6 +14,8 @@
 - `own` level (human_agent on calls): queries must filter by `agent_user_id == user.id`.
 - Maker-checker: makers (bot_designer, campaign_manager) can never approve; only ops_manager / compliance_officer can.
 - User admin (super_admin): users are deactivated, never deleted; deactivation takes effect on the user's next request. Nobody can deactivate themselves or change their own role.
+- Exception: `/telephony/plivo/*` are called by Plivo, not users, so they have no `require()`. Webhooks must carry a valid `X-Plivo-Signature-V3` (signed over `PUBLIC_BASE_URL` + path) or get 403; the audio WebSocket needs the one-time token issued by the signed answer webhook.
+- Real dialling: when `CONTACT_ALLOWLIST_PREFIX` is set (staging: `TST-`), campaigns ring only customers whose code starts with it.
 - Live monitor: masked roles (ops_manager) get masked phones and no customer speech in the transcript snippet.
 
 ## 3. Masking

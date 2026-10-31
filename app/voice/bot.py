@@ -1,4 +1,4 @@
-"""Pipecat bot: browser (SmallWebRTC) <-> Gemini Live, with the five policy tools.
+"""Pipecat bot: browser (SmallWebRTC) or phone (Plivo WebSocket) <-> Gemini Live, with the five policy tools.
 
 Pattern follows the Pipecat 1.15 realtime template (PipelineWorker + WorkerRunner + RTVI)."""
 
@@ -16,9 +16,7 @@ from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair, LLMUserAggregatorParams
 from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService
 from pipecat.services.llm_service import FunctionCallParams
-from pipecat.transports.base_transport import TransportParams
-from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
-from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
+from pipecat.transports.base_transport import BaseTransport
 from pipecat.workers.runner import WorkerRunner
 from sqlalchemy.orm import sessionmaker
 
@@ -83,13 +81,12 @@ def _load(session_factory: sessionmaker, call_id: int):
         return call, script, customer, policy
 
 
-async def run_bot(connection: SmallWebRTCConnection, live: LiveSession, session_factory: sessionmaker) -> None:
+async def run_bot(transport: BaseTransport, live: LiveSession, session_factory: sessionmaker,
+                  phone: bool = False) -> None:
     s = get_settings()
     state = live.state
     call, script, customer, policy = await asyncio.to_thread(_load, session_factory, state.call_id)
 
-    transport = SmallWebRTCTransport(webrtc_connection=connection,
-                                     params=TransportParams(audio_in_enabled=True, audio_out_enabled=True))
     worker: PipelineWorker | None = None
 
     async def notify(data: dict) -> None:
@@ -163,8 +160,11 @@ async def run_bot(connection: SmallWebRTCConnection, live: LiveSession, session_
     await runner.add_workers(worker)
     live.runner, live.worker = runner, worker
 
-    @worker.rtvi.event_handler("on_client_ready")
-    async def _ready(_rtvi) -> None:
+    # A phone line has no RTVI client, so start talking as soon as Plivo's audio stream connects.
+    source, event = (transport, "on_client_connected") if phone else (worker.rtvi, "on_client_ready")
+
+    @source.event_handler(event)
+    async def _ready(*_) -> None:
         context.add_message({"role": "developer",
                              "content": "The call has connected. Begin now with your opening and the disclosure."})
         await worker.queue_frames([LLMRunFrame()])

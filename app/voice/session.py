@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 @dataclass
 class LiveSession:
     state: CallState
-    agent_user_id: int
+    agent_user_id: int | None  # None for campaign phone calls (no console agent)
     runner: Any = None  # pipecat WorkerRunner while the bot is connected
     worker: Any = None
     taken_over: bool = False

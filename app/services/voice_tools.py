@@ -5,6 +5,7 @@ verify_customer has succeeded for this call, and every figure the bot may speak 
 """
 
 import re
+import threading
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from typing import Any
@@ -34,6 +35,7 @@ class CallState:
     verified_customer_id: int | None = None
     verify_attempts: int = 0
     actions: list[str] = field(default_factory=list)  # tool names that succeeded
+    last_seq: int = 0  # highest transcript seq handed out, including turns not yet committed
 
     @property
     def verified(self) -> bool:
@@ -78,10 +80,15 @@ def parse_when(raw: str, now: datetime) -> datetime:
     return when
 
 
+_SEQ_LOCK = threading.Lock()
+
+
 def add_turn(db: Session, state: CallState, speaker: Speaker, text: str,
              tool_name: str | None = None, payload: dict | None = None, at: datetime | None = None) -> TranscriptTurn:
     """Append a transcript turn. `at` = when the turn started (defaults to now); turns are read in offset order."""
-    seq = (db.scalar(select(func.max(TranscriptTurn.seq)).where(TranscriptTurn.call_id == state.call_id)) or 0) + 1
+    saved = db.scalar(select(func.max(TranscriptTurn.seq)).where(TranscriptTurn.call_id == state.call_id)) or 0
+    with _SEQ_LOCK:  # the bot saves turns from several threads; two could read the same max before either commits
+        seq = state.last_seq = max(saved, state.last_seq) + 1
     turn = TranscriptTurn(call_id=state.call_id, seq=seq, speaker=speaker, text=text,
                           offset_ms=max(int(((at or utcnow()) - state.started_at).total_seconds() * 1000), 0),
                           tool_name=tool_name, tool_payload=payload)

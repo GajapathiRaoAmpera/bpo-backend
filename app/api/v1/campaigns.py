@@ -114,15 +114,21 @@ def submit_campaign(campaign_id: int, request: Request, access: Access = Depends
 @router.post("/{campaign_id}/launch", response_model=LaunchOut)
 def launch_campaign(campaign_id: int, request: Request, access: Access = Depends(write),
                     db: Session = Depends(get_db)) -> LaunchOut:
-    """Sandbox launch: places the next 3 simulated calls. Running campaigns can dial the next batch."""
+    """Places the next 3 calls: real Plivo calls when Plivo is configured, otherwise simulated (sandbox only).
+    Running campaigns can dial the next batch."""
     c = _get(db, campaign_id)
     if c.status not in (CampaignStatus.approved, CampaignStatus.running):
         raise HTTPException(409, "Only approved campaigns can be launched")
-    if get_settings().app_env == "production":  # never simulate calls on real data; real dialling is section 6b
-        raise HTTPException(409, "Real dialling is not set up yet")
-    call_ids = svc.launch(db, c)
+    s = get_settings()
+    if s.plivo_enabled:
+        call_ids = svc.dial(db, c)
+    elif s.app_env == "production":  # never simulate calls on real data
+        raise HTTPException(409, "Real dialling is not set up yet: set the PLIVO_* and PUBLIC_BASE_URL settings")
+    else:
+        call_ids = svc.launch(db, c)
     audit.record(db, request, AuditAction.launch, entity_type="campaign", entity_id=c.id,
-                 detail={"name": c.name, "simulated_calls": call_ids, "dialled": c.dialled})
+                 detail={"name": c.name, "real_calls" if s.plivo_enabled else "simulated_calls": call_ids,
+                         "dialled": c.dialled})
     return LaunchOut(campaign=campaign_out(db, c), call_ids=call_ids)
 
 

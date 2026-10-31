@@ -141,7 +141,7 @@ def test_production_never_simulates_launch(login, db, monkeypatch):
     from types import SimpleNamespace
     c = db.scalars(select(Campaign).where(Campaign.status == CampaignStatus.running)).first()
     calls_before = db.scalar(select(func.count()).select_from(Call))
-    monkeypatch.setattr("app.api.v1.campaigns.get_settings", lambda: SimpleNamespace(app_env="production"))
+    monkeypatch.setattr("app.api.v1.campaigns.get_settings", lambda: SimpleNamespace(app_env="production", plivo_enabled=False))
     r = login(R.campaign_manager).post(f"{API}/campaigns/{c.id}/launch")
     assert r.status_code == 409 and "dialling" in r.json()["detail"]
     assert db.scalar(select(func.count()).select_from(Call)) == calls_before

@@ -122,12 +122,18 @@ async def offer(call_id: int, body: OfferIn, request: Request, access: Access = 
         raise HTTPException(409, "This call can no longer be connected")
     if live.runner is not None and not body.pc_id:
         raise HTTPException(409, "This call is already connected")
-    from app.voice.bot import run_bot  # heavy import (pipecat/torch VAD) only when a call starts
+    # heavy imports (pipecat/torch VAD) only when a call starts
+    from pipecat.transports.base_transport import TransportParams
+    from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
+
+    from app.voice.bot import run_bot
 
     factory = request.app.state.session_factory
 
     async def start(connection) -> None:
-        spawn(run_bot(connection, live, factory))
+        transport = SmallWebRTCTransport(webrtc_connection=connection,
+                                         params=TransportParams(audio_in_enabled=True, audio_out_enabled=True))
+        spawn(run_bot(transport, live, factory))
 
     return await request.app.state.webrtc.handle_web_request(
         SmallWebRTCRequest(sdp=body.sdp, type=body.type, pc_id=body.pc_id, restart_pc=body.restart_pc,

@@ -28,7 +28,8 @@ Role codes: SA super_admin, OM ops_manager, TL team_lead, HA human_agent, CM cam
 | ✅ `GET /live/calls` (in-progress calls; customer phone masked and customer speech hidden for OM) | TL, OM | 5 |
 | ✅ `GET /escalations` (active queue by priority, or ?status=) · `POST /escalations/{id}/claim`, `/resolve` {note} (audited; 409 if claimed by someone else, TL may resolve any) | read TL, HA, OM · act TL, HA | 3 |
 | ✅ `GET /followups` (?status, kind, paginated) · `POST /followups` · `PATCH /followups/{id}` (done/cancel, reschedule; audited) | read TL, HA, CM, OM · write TL, HA, CM | 3 |
-| ✅ `GET/POST /campaigns`, `GET /campaigns/audience` (wizard preview), `PATCH` (draft), `/submit`, `/launch` (approved/running; 3 simulated calls in sandbox, 409 under `APP_ENV=production` until real dialling exists) | read CM, OM, CO · write CM | 4 |
+| ✅ `GET/POST /campaigns`, `GET /campaigns/audience` (wizard preview), `PATCH` (draft), `/submit`, `/launch` (approved/running; 3 calls per launch: real Plivo calls when `PLIVO_*` + `PUBLIC_BASE_URL` are set, only to `CONTACT_ALLOWLIST_PREFIX` customers if set; otherwise simulated in sandbox and 409 in production) | read CM, OM, CO · write CM | 4 |
+| ✅ `POST /telephony/plivo/answer/{call_id}` (Plivo XML `<Stream>` to the WebSocket) · `WS /telephony/plivo/ws/{call_id}/{token}` (call audio ↔ bot) · `POST /telephony/plivo/hangup/{call_id}` (closes the call) | Plivo only: `X-Plivo-Signature-V3` on webhooks, one-time token on the WebSocket; no user session | 6b |
 | ✅ `POST /campaigns/{id}/approve`, `/reject` {checklist, note} (all checks to approve; note to reject; not on own items) | OM, CO | 4 |
 | ✅ `GET/POST /scripts`, `PATCH` (draft), `/submit` (new version = new row with parent_id) | read BD, CO (OM reads pending scripts via `/approvals`; no `bot_studio` access in the matrix) · write BD | 4 |
 | ✅ `POST /scripts/{id}/approve`, `/reject` {checklist, note} | OM, CO | 4 |
