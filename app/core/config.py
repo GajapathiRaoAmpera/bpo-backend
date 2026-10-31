@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_ttl_minutes: int = 8 * 60
     cookie_name: str = "av_session"
+    login_rate_limit: str = "5/minute"  # per client IP, slowapi syntax
 
     @model_validator(mode="after")
     def _production_guard(self) -> "Settings":

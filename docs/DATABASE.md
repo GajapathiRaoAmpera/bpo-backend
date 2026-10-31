@@ -53,3 +53,9 @@ Sandbox: schema is recreated by `make reset` (drop + create + seed). Before any 
 
 ## 8. Seed Data (`app/seed`)
 Deterministic (`rng_seed=2026`), dates relative to today: 8 personas; 500 customers (Indian names, ~60% Tamil Nadu, English/Tamil/Hindi); 1–3 policies each, renewals over the next 60 days (plus some renewed/lapsed); 30 days of ~1,200 calls inside 09:00–19:00 IST with transcripts, summaries, QA scores; matching follow-ups, escalations (some open), campaigns in every status, scripts (v1 approved, renewal v2 pending), audit entries, integrations. Runs in ~2s.
+
+## 9. CSV import (`app/import_customers.py`)
+`poetry run python -m app.import_customers file.csv [--dry-run]` upserts customers and policies (e.g. staging testers, codes `TST-...`). Example file: `docs/customers_sample.csv`.
+- One row per policy. Columns: `customer_code, full_name, phone, email, dob, city, state, preferred_language, policy_no, product, plan_name, sum_insured_inr, premium_inr, status, start_date, renewal_date, vehicle_reg` (optional) and `consent`.
+- Validation: `consent` must be `yes`; enums by value (`motor/health/term_life`, `english/tamil/hindi`, `active/due/lapsed/renewed`); INR whole rupees ≥ 0 (`12,400` allowed); dates via `parse_dob` (YYYY-MM-DD preferred), renewal not before start; phone an Indian mobile (`+91`/`0` prefix stripped, stored as 10 digits); `policy_no` normalised to `MOT-2026-001234`; rows sharing a `customer_code` must agree on customer fields; a `policy_no` already owned by another customer is rejected.
+- All or nothing: any bad row prints `row N: reason` (header = line 1), writes nothing and exits 1. Otherwise upserts on `customer_code` / `policy_no` in one transaction with one `audit_log` row (`create`, `customer_import`, counts only, no actor). `--dry-run` validates and prints counts without writing.

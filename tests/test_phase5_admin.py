@@ -6,7 +6,7 @@ from app.models.enums import AuditAction, Role
 
 R = Role
 NEW = {"email": "Nila.Ramesh@sandbox.assurevoice.in", "full_name": "Nila Ramesh",
-       "job_title": "Service Executive", "role": "human_agent", "password": "Fresh@Pass9"}
+       "job_title": "Service Executive", "role": "human_agent", "password": "Fresh@Pass99"}
 
 
 def _last(db) -> AuditLog:
@@ -42,11 +42,11 @@ def test_user_lifecycle(login, client, db):
     assert stored.password_hash != NEW["password"]
     assert c.post("/api/v1/users", json=NEW).status_code == 409
 
-    r = c.patch(f"/api/v1/users/{uid}", json={"role": "team_lead", "password": "Other@Pass9"})
+    r = c.patch(f"/api/v1/users/{uid}", json={"role": "team_lead", "password": "Other@Pass99"})
     assert r.status_code == 200 and r.json()["role"] == "team_lead"
     entry = _last(db)
     assert entry.action == AuditAction.update and entry.detail["password_reset"] is True
-    assert "Other@Pass9" not in str(entry.detail)
+    assert "Other@Pass99" not in str(entry.detail)
 
     r = c.delete(f"/api/v1/users/{uid}")
     assert r.status_code == 200 and r.json()["is_active"] is False
@@ -54,12 +54,12 @@ def test_user_lifecycle(login, client, db):
     db.expire_all()
     assert db.get(User, uid) is not None  # deactivated, never deleted
 
-    r = client.post("/api/v1/auth/login", json={"email": NEW["email"], "password": "Other@Pass9"})
+    r = client.post("/api/v1/auth/login", json={"email": NEW["email"], "password": "Other@Pass99"})
     assert r.status_code == 401
 
     # reactivate: the new password now works
     login(R.super_admin).patch(f"/api/v1/users/{uid}", json={"is_active": True})
-    assert client.post("/api/v1/auth/login", json={"email": NEW["email"], "password": "Other@Pass9"}).status_code == 200
+    assert client.post("/api/v1/auth/login", json={"email": NEW["email"], "password": "Other@Pass99"}).status_code == 200
 
 
 def test_cannot_deactivate_or_demote_self(login, db):

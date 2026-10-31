@@ -1,8 +1,9 @@
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi.errors import RateLimitExceeded
 
 from app.api.v1 import auth, customers, rbac, voice, audit, integrations, live, users
 from app.api.v1 import calls, dashboard, escalations, followups, policies
@@ -10,6 +11,7 @@ from app.api.v1 import approvals, campaigns, qa, scripts
 from app.core.audit import install_audit_middleware
 from app.core.config import get_settings
 from app.core.db import SessionLocal
+from app.core.ratelimit import limiter, rate_limited
 
 
 @asynccontextmanager
@@ -29,12 +31,29 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="AssureVoice AI API", version="1.0.0", openapi_url="/openapi.json", lifespan=lifespan)
+    s = get_settings()
+    prod = s.app_env == "production"
+    # No /docs, /redoc or /openapi.json in production; frontend types are generated against sandbox.
+    app = FastAPI(title="AssureVoice AI API", version="1.0.0", lifespan=lifespan,
+                  openapi_url=None if prod else "/openapi.json")
     app.state.session_factory = SessionLocal
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, rate_limited)
 
     install_audit_middleware(app)
-    app.add_middleware(CORSMiddleware, allow_origins=[get_settings().frontend_origin],
+    app.add_middleware(CORSMiddleware, allow_origins=[s.frontend_origin],
                        allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+    security_headers = {"X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY",
+                        "Referrer-Policy": "strict-origin-when-cross-origin"}
+    if s.cookie_secure:  # HSTS only when served over HTTPS
+        security_headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+
+    @app.middleware("http")
+    async def add_security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers.update(security_headers)
+        return response
 
     v1 = APIRouter(prefix="/api/v1")
     for module in (auth, customers, rbac, voice, audit, integrations, live, users,

@@ -27,6 +27,9 @@ make test      # pytest
 
 Docker: `docker build -t assurevoice-backend . && docker run --env-file .env -p 8000:8000 assurevoice-backend` (seeds on first start).
 
+## Production first admin
+On an empty (migrated) production database, instead of seeding run `BOOTSTRAP_PASSWORD=... poetry run python -m app.bootstrap --email you@insurer.in --name "Your Name" [--title ...]` (omit the env var to be prompted twice). It creates one super_admin (password 12+ characters), the default approved scripts and the integration rows, and does nothing if any user already exists. Add other staff in Admin → Users.
+
 ## Sandbox data
 `make reset` drops and reseeds everything in ~2 s: 8 personas, 500 customers, ~850 policies (renewals over the next 60 days), 1,200 calls over 30 days with transcripts, summaries and QA scores, plus follow-ups, escalations, campaigns, scripts, audit entries and integrations. Deterministic, with dates relative to today.
 
