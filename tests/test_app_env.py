@@ -23,3 +23,13 @@ def test_production_refuses_unsafe_settings(override, message):
 
 def test_sandbox_allows_dev_settings():
     Settings(_env_file=None, jwt_secret="short", seed_password="p", database_url="sqlite:///./x.db")
+
+
+def test_seed_refuses_production_without_flag():
+    import os
+    import subprocess
+    import sys
+    env = {**os.environ, "APP_ENV": "production", "JWT_SECRET": "x" * 32, "COOKIE_SECURE": "true",
+           "DATABASE_URL": "postgresql+psycopg://u:p@127.0.0.1:1/none"}  # never reached: the guard exits first
+    r = subprocess.run([sys.executable, "-m", "app.seed"], env=env, capture_output=True, text=True, timeout=120)
+    assert r.returncode == 1 and "--i-know" in r.stderr

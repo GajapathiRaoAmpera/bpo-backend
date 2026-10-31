@@ -3,8 +3,14 @@
 Source of truth for the data model: `app/models/__init__.py` and `app/models/enums.py`. Do not invent tables or fields; update this file when the schema changes.
 
 ## 1. Engine
-SQLite (`sqlite:///./assurevoice.db`) for the sandbox. PostgreSQL (e.g. Supabase, driver `psycopg`) by changing `DATABASE_URL` to `postgresql+psycopg://...`; no SQLite-only SQL, enums stored as strings.
+SQLite (`sqlite:///./assurevoice.db`) for the sandbox. PostgreSQL (e.g. Supabase, driver `psycopg`) by changing `DATABASE_URL` to `postgresql+psycopg://...`; no SQLite-only SQL. Enums are strings on SQLite and native enum types on Postgres.
 To load the sandbox into a remote Postgres, seed SQLite and bulk-copy it: `DATABASE_URL=sqlite:///./assurevoice.db poetry run python -m app.seed && poetry run python -m scripts.copy_to_postgres` (the row-by-row seed is too slow over the network).
+
+## Migrations (Alembic)
+Every schema change needs a migration: change the model, then `poetry run alembic revision --autogenerate -m "what changed"`, review the file, and `make migrate`. `tests/test_migrations.py` fails if models and migrations drift apart.
+- Adding a value to an enum is not autodetected: on Postgres write `op.execute("ALTER TYPE <name> ADD VALUE '<value>'")` by hand.
+- The Docker image runs `alembic upgrade head` on start. `make reset` / `python -m app.seed` still rebuild tables with `create_all` (sandbox only; refuses under `APP_ENV=production` without `--i-know`).
+- A database created before migrations existed (e.g. the Supabase staging DB) is adopted with `alembic stamp head` after checking it has no drift.
 
 ## 2. Conventions
 - Tables: plural snake_case. Columns: snake_case. PK: `id` integer (except `qa_scores.call_id`).
