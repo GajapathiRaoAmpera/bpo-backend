@@ -1,5 +1,7 @@
-"""Sandbox follow-up timer: every 2 minutes, scheduled follow-ups that are due are marked `sent` with a
-WhatsApp-style message. Nothing is sent anywhere: the message is only stored on the follow-up."""
+"""Follow-up timer: every 2 minutes, scheduled follow-ups that are due are marked `sent` with a WhatsApp-style
+message. The message is always stored on the follow-up; it is also really sent over WhatsApp when
+`whatsapp_enabled` and the customer passes CONTACT_ALLOWLIST_PREFIX (see app.core.config), otherwise it stays
+sandbox-only (stored, never delivered)."""
 
 import logging
 from datetime import datetime, timedelta
@@ -15,6 +17,7 @@ from app.core.db import utcnow
 from app.core.formatting import format_date, format_inr
 from app.models import Customer, Followup, Policy
 from app.models.enums import FollowupKind, FollowupStatus
+from app.services.whatsapp import send_template
 
 log = logging.getLogger(__name__)
 
@@ -68,13 +71,15 @@ def send_due_followups(db: Session, now: datetime | None = None) -> list[int]:
     """Marks due scheduled follow-ups as sent (sandbox: the message is stored, never delivered).
     Gemini Flash writes the text when a key is set, else (or on any failure) the deterministic template."""
     now = now or utcnow()
-    use_ai = bool(get_settings().google_api_key)
+    s = get_settings()
+    use_ai = bool(s.google_api_key)
     due = db.scalars(select(Followup).where(Followup.status == FollowupStatus.scheduled, Followup.due_at <= now)
                      .order_by(Followup.due_at).limit(BATCH)).all()
+    sent = []
     for f in due:
         p, c = db.get(Policy, f.policy_id), db.get(Customer, f.customer_id)
         if f.kind == FollowupKind.payment_link and not f.payment_link_url:
-            f.payment_link_url = f"{get_settings().payment_link_base}/{p.policy_no.lower()}-f{f.id}"
+            f.payment_link_url = f"{s.payment_link_base}/{p.policy_no.lower()}-f{f.id}"
         text = None
         # Only fresh follow-ups use Gemini: the seeded backlog would burn the Flash quota post-call analysis needs.
         if use_ai and now - f.due_at <= AI_FRESHNESS:
@@ -84,9 +89,22 @@ def send_due_followups(db: Session, now: datetime | None = None) -> list[int]:
                 log.warning("Gemini follow-up message failed, using template: %s", e)
                 use_ai = False
         f.message_text = text or template_message(f, c, p)
+        if s.whatsapp_enabled and (not s.contact_allowlist_prefix
+                                    or c.customer_code.startswith(s.contact_allowlist_prefix)):
+            try:
+                # shortcut: Meta's "hello_world" connectivity-test template takes no parameters; any real
+                # approved template takes the 3 below. Upgrade when more than one real template is needed.
+                params = [] if s.whatsapp_template_name == "hello_world" else [
+                    c.full_name.split()[0], format_inr(p.premium_inr), f.payment_link_url or ""]
+                send_template(c.phone, params)
+            except Exception as e:  # Meta/network error: leave it due, the next run retries
+                log.warning("WhatsApp send failed for followup %d: %s", f.id, e)
+                db.commit()  # keep the stored message_text/payment_link_url, just don't mark it sent
+                continue
         f.status, f.sent_at = FollowupStatus.sent, now
         db.commit()  # per item: a later failure doesn't undo messages already "sent"
-    return [f.id for f in due]
+        sent.append(f.id)
+    return sent
 
 
 def start_scheduler(session_factory: sessionmaker) -> BackgroundScheduler:

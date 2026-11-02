@@ -7,7 +7,8 @@ os.environ.update(JWT_SECRET="test-secret-" + "x" * 40, SEED_PASSWORD="Test@Pass
                   DATABASE_URL=f"sqlite:///{_tmp}/test.db", FRONTEND_ORIGIN="http://localhost:3000",
                   GOOGLE_API_KEY="",  # never call Gemini from tests
                   PLIVO_AUTH_ID="", PLIVO_AUTH_TOKEN="", PLIVO_FROM_NUMBER="", PUBLIC_BASE_URL="",
-                  CONTACT_ALLOWLIST_PREFIX="")  # never dial real phones from tests, whatever .env says
+                  WHATSAPP_PHONE_NUMBER_ID="", WHATSAPP_ACCESS_TOKEN="", WHATSAPP_TEMPLATE_NAME="",
+                  CONTACT_ALLOWLIST_PREFIX="")  # never dial/message real phones from tests, whatever .env says
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

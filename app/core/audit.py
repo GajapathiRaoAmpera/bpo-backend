@@ -11,7 +11,9 @@ _METHOD_ACTION = {"POST": AuditAction.create, "PUT": AuditAction.update,
 
 
 def _client(request: Request) -> tuple[str | None, str | None]:
-    ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (
+    # Cloud Run's load balancer appends the real client IP as the LAST entry; anything before that
+    # (including the first entry) is whatever the client itself sent, so it can be spoofed.
+    ip = request.headers.get("x-forwarded-for", "").split(",")[-1].strip() or (
         request.client.host if request.client else None)
     return ip, (request.headers.get("user-agent") or "")[:300] or None
 

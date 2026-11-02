@@ -39,7 +39,8 @@ def test_due_followups_are_sent_with_template(db):
 
 def test_gemini_used_for_fresh_followups_and_falls_back(db, monkeypatch):
     now = utcnow()
-    monkeypatch.setattr(fs, "get_settings", lambda: type("S", (), {"google_api_key": "k"})())
+    monkeypatch.setattr(fs, "get_settings",
+                        lambda: type("S", (), {"google_api_key": "k", "whatsapp_enabled": False})())
     calls = []
 
     def fake(f, c, p):

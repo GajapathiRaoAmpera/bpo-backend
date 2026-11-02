@@ -1,13 +1,14 @@
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import APIRouter, FastAPI, Request
+import sqlalchemy as sa
+from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 
 from app.api.v1 import auth, customers, rbac, voice, audit, integrations, live, users
 from app.api.v1 import calls, dashboard, escalations, followups, policies
-from app.api.v1 import approvals, campaigns, qa, scripts, telephony
+from app.api.v1 import approvals, campaigns, qa, scripts, telephony, whatsapp
 from app.core.audit import install_audit_middleware
 from app.core.config import get_settings
 from app.core.db import SessionLocal
@@ -58,12 +59,17 @@ def create_app() -> FastAPI:
     v1 = APIRouter(prefix="/api/v1")
     for module in (auth, customers, rbac, voice, audit, integrations, live, users,
                    calls, dashboard, escalations, followups, policies,
-                   approvals, campaigns, qa, scripts, telephony):
+                   approvals, campaigns, qa, scripts, telephony, whatsapp):
         v1.include_router(module.router)
     app.include_router(v1)
 
     @app.get("/health", tags=["health"])
     def health() -> dict[str, str]:
+        try:
+            with SessionLocal() as db:
+                db.execute(sa.text("select 1"))
+        except Exception as e:
+            raise HTTPException(503, f"database unavailable: {e}") from e
         return {"status": "ok"}
 
     return app

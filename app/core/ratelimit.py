@@ -8,7 +8,7 @@ from app.core.audit import _client
 
 
 def client_ip(request: Request) -> str:
-    # First X-Forwarded-For entry (Cloud Run / Next.js proxy), else the socket peer.
+    # Last X-Forwarded-For entry (the one Cloud Run itself appended), else the socket peer.
     return _client(request)[0] or "unknown"
 
 

@@ -33,11 +33,22 @@ class Settings(BaseSettings):
     plivo_auth_token: str = ""
     plivo_from_number: str = ""
     public_base_url: str = ""  # backend's public https URL that Plivo calls back, no trailing slash
-    contact_allowlist_prefix: str = ""  # e.g. "TST-": only customers whose code starts with it are dialled
+    contact_allowlist_prefix: str = ""  # e.g. "TST-": only customers whose code starts with it are dialled/messaged
+
+    # Real WhatsApp sends (Meta Cloud API). Unset = follow-ups store the message but send nothing.
+    whatsapp_phone_number_id: str = ""
+    whatsapp_access_token: str = ""
+    whatsapp_template_name: str = ""  # must be an approved template in Meta Business Manager
+    whatsapp_app_secret: str = ""  # Meta app's Basic Settings; verifies X-Hub-Signature-256 on the webhook
+    whatsapp_webhook_verify_token: str = ""  # any string you choose; Meta echoes it back on the GET handshake
 
     @property
     def plivo_enabled(self) -> bool:
         return all((self.plivo_auth_id, self.plivo_auth_token, self.plivo_from_number, self.public_base_url))
+
+    @property
+    def whatsapp_enabled(self) -> bool:
+        return all((self.whatsapp_phone_number_id, self.whatsapp_access_token, self.whatsapp_template_name))
 
     @model_validator(mode="after")
     def _production_guard(self) -> "Settings":
