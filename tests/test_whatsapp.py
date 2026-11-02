@@ -9,9 +9,10 @@ from sqlalchemy import select
 from app.api.v1.integrations import list_integrations
 from app.core.config import get_settings
 from app.core.db import utcnow
-from app.models import Customer, Followup, Policy
-from app.models.enums import FollowupKind, FollowupStatus
+from app.models import Call, Customer, Followup, Policy
+from app.models.enums import CallMode, CallStatus, FollowupKind, FollowupStatus
 from app.services import followup_scheduler as fs
+from app.services import voice_tools as vt
 from app.services import whatsapp
 
 
@@ -82,3 +83,53 @@ def test_send_failure_leaves_the_followup_due_for_retry(db, whatsapp_on, followu
 def test_whatsapp_integration_row_is_connected_once_configured(db, whatsapp_on):
     row = next(r for r in list_integrations(db) if r.key == "whatsapp")
     assert row.status == "connected"
+
+
+@pytest.fixture
+def verified_call(db):
+    """A verified, in-progress call for a customer with no scheduled follow-ups (same isolation reason
+    as the `followup` fixture)."""
+    busy = select(Followup.customer_id).where(Followup.status == FollowupStatus.scheduled)
+    p = db.scalars(select(Policy).join(Customer, Customer.id == Policy.customer_id)
+                   .where(Customer.id.not_in(busy)).order_by(Policy.id)).first()
+    c = db.get(Customer, p.customer_id)
+    old_code = c.customer_code
+    call = Call(call_ref=f"CALL-WA-{utcnow().timestamp()}", direction="inbound", mode=CallMode.inbound,
+                status=CallStatus.in_progress, started_at=utcnow(), customer_id=c.id, policy_id=p.id)
+    db.add(call)
+    db.commit()
+    state = vt.CallState(call_id=call.id, started_at=call.started_at)
+    assert vt.verify_customer(db, state, p.policy_no, c.dob.isoformat())["ok"]
+    yield state, c, p
+    c.customer_code = old_code
+    db.commit()
+
+
+def test_send_payment_link_sends_real_whatsapp_when_allowlisted(db, whatsapp_on, verified_call):
+    state, c, p = verified_call
+    c.customer_code = "TST-0001"
+    db.commit()
+    r = vt.send_payment_link(db, state, p.policy_no)
+    assert r["ok"] is True and whatsapp_on.call_count == 1
+    f = db.scalars(select(Followup).where(Followup.call_id == state.call_id)).first()
+    assert f.status == FollowupStatus.sent
+
+
+def test_send_payment_link_stays_simulated_when_not_allowlisted(db, whatsapp_on, verified_call):
+    state, c, p = verified_call
+    c.customer_code = "CUS-0001"
+    db.commit()
+    r = vt.send_payment_link(db, state, p.policy_no)
+    assert r["ok"] is True and whatsapp_on.call_count == 0
+
+
+def test_send_payment_link_reports_a_real_whatsapp_failure(db, whatsapp_on, verified_call):
+    state, c, p = verified_call
+    c.customer_code = "TST-0002"
+    db.commit()
+    whatsapp_on.return_value = MagicMock(status_code=401, raise_for_status=MagicMock(
+        side_effect=Exception("401 invalid token")))
+    r = vt.send_payment_link(db, state, p.policy_no)
+    assert r["ok"] is False
+    f = db.scalars(select(Followup).where(Followup.call_id == state.call_id)).first()
+    assert f.status == FollowupStatus.scheduled  # the background timer will retry it

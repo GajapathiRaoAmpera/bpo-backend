@@ -4,6 +4,7 @@ Guardrails live in code, not only in the prompt: nothing about a policy is retur
 verify_customer has succeeded for this call, and every figure the bot may speak comes from here.
 """
 
+import logging
 import re
 import threading
 from dataclasses import dataclass, field
@@ -21,6 +22,9 @@ from app.models import Call, Customer, Escalation, Followup, Policy, TranscriptT
 from app.models.enums import (
     EscalationStatus, FollowupKind, FollowupStatus, Priority, Speaker,
 )
+from app.services.whatsapp import send_template
+
+log = logging.getLogger(__name__)
 
 MAX_VERIFY_ATTEMPTS = 3
 CALL_WINDOW = (9, 19)  # TRAI calling window, IST
@@ -169,18 +173,36 @@ def send_payment_link(db: Session, state: CallState, policy_no: str, created_by:
     if err:
         return _record(db, state, "send_payment_link", "Payment link refused: not verified", args, err)
     customer = db.get(Customer, p.customer_id)
-    url = f"{get_settings().payment_link_base}/{p.policy_no.lower()}-{state.call_id}"
+    s = get_settings()
+    url = f"{s.payment_link_base}/{p.policy_no.lower()}-{state.call_id}"
     first = customer.full_name.split()[0]
+    text = (f"Hi {first}, here is your secure link to renew {p.policy_no} "
+            f"({format_inr(p.premium_inr)}, due {format_date(p.renewal_date)}): {url} – AssureVoice Insurance")
+    sent_ok = True
+    note = ("Sandbox link; no real message or payment." if s.app_env == "sandbox" else
+            "Pilot – link not payable and WhatsApp is not live: tell the customer a colleague will share the payment link.")
+    if s.whatsapp_enabled and (not s.contact_allowlist_prefix
+                                or customer.customer_code.startswith(s.contact_allowlist_prefix)):
+        try:
+            # shortcut: see followup_scheduler.py, same hello_world-has-no-params exception.
+            params = [] if s.whatsapp_template_name == "hello_world" else [first, format_inr(p.premium_inr), url]
+            send_template(customer.phone, params)
+            note = ("Sent a WhatsApp connectivity-test message (hello_world); the real payment-link template "
+                    "isn't approved yet." if s.whatsapp_template_name == "hello_world" else "Sent over WhatsApp.")
+        except Exception as e:
+            log.warning("WhatsApp send failed for call %d policy %s: %s", state.call_id, p.policy_no, e)
+            sent_ok = False
+            note = "WhatsApp send failed; tell the customer a colleague will follow up with the link."
     db.add(Followup(policy_id=p.id, customer_id=customer.id, call_id=state.call_id, kind=FollowupKind.payment_link,
-                    due_at=utcnow(), reason="Payment link requested on call", status=FollowupStatus.sent,
-                    message_text=f"Hi {first}, here is your secure link to renew {p.policy_no} "
-                                 f"({format_inr(p.premium_inr)}, due {format_date(p.renewal_date)}): {url} "
-                                 "– AssureVoice Insurance",
-                    payment_link_url=url, created_by=created_by, sent_at=utcnow()))
-    return _record(db, state, "send_payment_link", f"Payment link sent on WhatsApp for {p.policy_no}", args, {
-        "ok": True, "sent_to": f"WhatsApp {mask_phone(customer.phone)}", "amount_spoken": format_inr(p.premium_inr),
-        "note": "Sandbox link; no real message or payment." if get_settings().app_env == "sandbox" else
-                "Pilot – link not payable and WhatsApp is not live: tell the customer a colleague will share the payment link.",
+                    due_at=utcnow(), reason="Payment link requested on call",
+                    status=FollowupStatus.sent if sent_ok else FollowupStatus.scheduled,
+                    message_text=text, payment_link_url=url, created_by=created_by,
+                    sent_at=utcnow() if sent_ok else None))
+    return _record(db, state, "send_payment_link",
+                   f"Payment link sent on WhatsApp for {p.policy_no}" if sent_ok else
+                   f"Payment link send failed for {p.policy_no}", args, {
+        "ok": sent_ok, "sent_to": f"WhatsApp {mask_phone(customer.phone)}", "amount_spoken": format_inr(p.premium_inr),
+        "note": note,
     })
 
 
