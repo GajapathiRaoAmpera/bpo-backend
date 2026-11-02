@@ -55,7 +55,7 @@ def test_bootstrap_rejects_short_password(empty_db, monkeypatch):
 
 def test_users_api_rejects_11_char_password(login):
     c = login(Role.super_admin)
-    body = {"email": "eleven@sandbox.assurevoice.in", "full_name": "Eleven Chars", "job_title": "Service Executive",
+    body = {"email": "eleven@sandbox.amperabpo.in", "full_name": "Eleven Chars", "job_title": "Service Executive",
             "role": "human_agent", "password": "Short@Pass1"}
     assert c.post("/api/v1/users", json=body).status_code == 422
     me = c.get("/api/v1/auth/me").json()["user"]["id"]

@@ -100,7 +100,7 @@ class _Gen:
         pw = hash_password(password)
         for name, role, title in PERSONAS:
             first, last = name.lower().split(" ", 1)
-            u = User(email=f"{first}.{last.replace(' ', '')}@sandbox.assurevoice.in", full_name=name,
+            u = User(email=f"{first}.{last.replace(' ', '')}@sandbox.amperabpo.in", full_name=name,
                      job_title=title, role=role, password_hash=pw, created_at=self.ago(120))
             self.db.add(u)
             self.users[role] = u
@@ -342,13 +342,13 @@ class _Gen:
             lines.append((sp, text, tool, payload))
 
         if call.mode == CallMode.renewal:
-            add(Speaker.bot, f"Hello, this is Vani, an automated AI assistant from AssureVoice Insurance. "
+            add(Speaker.bot, f"Hello, this is Vani, an automated AI assistant from Ampera BPO. "
                              f"This call is recorded for quality and compliance. Am I speaking with {first}?")
             add(Speaker.customer, "Yes, speaking.")
             add(Speaker.bot, "I'm calling about an upcoming renewal. To protect your details, could you share "
                              "your policy number and date of birth?")
         else:
-            add(Speaker.bot, "Welcome to AssureVoice Insurance. I'm Vani, an automated AI assistant, and this call "
+            add(Speaker.bot, "Welcome to Ampera BPO. I'm Vani, an automated AI assistant, and this call "
                              "is recorded for quality and compliance. How can I help you today?")
             add(Speaker.customer, "I want to know when my policy renewal is due and how much I have to pay.")
             add(Speaker.bot, "I can help with that. Please share your policy number and date of birth.")
@@ -373,7 +373,7 @@ class _Gen:
             add(Speaker.tool, "Escalated to human agent", "escalate_to_human",
                 {"policy_no": p.policy_no, "reason": "Disputed late fee"})
             add(Speaker.bot, "I understand. I'm connecting you to a service executive now with the details of this call.")
-            add(Speaker.agent, f"Hello {first}, this is the AssureVoice service desk. I can see your concern and will look into it.")
+            add(Speaker.agent, f"Hello {first}, this is the Ampera BPO service desk. I can see your concern and will look into it.")
         elif call.outcome == o.not_interested:
             add(Speaker.customer, "I've got a cheaper quote elsewhere, so I won't be renewing.")
             add(Speaker.bot, "Thank you for letting me know. If you change your mind, you can call us anytime.")
@@ -408,8 +408,8 @@ class _Gen:
                 due_at=started + timedelta(minutes=2), reason="Payment link requested on call",
                 status=FollowupStatus.done if paid else FollowupStatus.sent,
                 message_text=f"Hi {first}, here is your secure link to renew {p.policy_no} "
-                             f"({format_inr(p.premium_inr)}, due {format_date(p.renewal_date)}). – AssureVoice Insurance",
-                payment_link_url=f"https://pay.sandbox.assurevoice.in/r/{p.policy_no.lower()}-{call.id}",
+                             f"({format_inr(p.premium_inr)}, due {format_date(p.renewal_date)}). – Ampera BPO",
+                payment_link_url=f"https://pay.sandbox.amperabpo.in/r/{p.policy_no.lower()}-{call.id}",
                 sent_at=started + timedelta(minutes=2), created_at=started))
         elif call.outcome == o.callback_scheduled:
             due = started + timedelta(days=1, hours=rng.randrange(-2, 4))

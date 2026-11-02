@@ -3,7 +3,7 @@
 > Kept identical in `bpo-backend/docs/PRD.md` and `bpo-frontend/docs/PRD.md`. Change both together.
 
 ## 1. Product Overview
-- **Product name:** AssureVoice AI (sandbox edition)
+- **Product name:** Ampera BPO (sandbox edition)
 - **One-line description:** An AI contact-centre platform for an Indian insurer that runs renewal calls, premium reminders, policy queries and follow-ups with a voice agent, with human escalation, QA, maker-checker approvals and a full audit log.
 - **Product type:** Enterprise internal tool, shown as an executive showcase.
 - **Primary platform:** Web (desktop, 1440px and 1920px).
@@ -29,7 +29,7 @@
 | Prakash Natarajan | `qa_analyst` | Quality Analyst | Review AI QA scores, lock evaluations |
 | Lakshmi Venkatesh | `compliance_officer` | Compliance Officer | Approve scripts/campaigns, read audit, export evidence |
 
-Emails: `firstname.lastname@sandbox.assurevoice.in`; password from `SEED_PASSWORD`.
+Emails: `firstname.lastname@sandbox.amperabpo.in`; password from `SEED_PASSWORD`.
 
 ## 5. User Stories
 - As Divya, I want to run a renewal call with the AI and take over when needed, so the customer gets a payment link, a callback, or a person.

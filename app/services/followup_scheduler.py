@@ -25,9 +25,9 @@ INTERVAL_MINUTES = 2
 BATCH = 25  # keeps one run short even after a long downtime
 AI_FRESHNESS = timedelta(minutes=30)
 
-PROMPT = """Write one short WhatsApp message (max 320 characters, plain text, no emojis) from AssureVoice
+PROMPT = """Write one short WhatsApp message (max 320 characters, plain text, no emojis) from Ampera BPO
 Insurance to a policyholder. Be polite and factual; use only the facts below; no promises or offers.
-End with "– AssureVoice Insurance".
+End with "– Ampera BPO".
 Facts: first name {first}; policy {policy_no} ({plan}); premium {premium}; renewal due {due};
 purpose: {purpose}; note from the team: {reason}{link}"""
 
@@ -47,7 +47,7 @@ def template_message(f: Followup, c: Customer, p: Policy) -> str:
         body = f"as requested, our team will call you shortly about {facts}. Reply here if another time suits you better"
     else:
         body = f"a reminder that the renewal for {facts} is coming up. Reply RENEW for a payment link"
-    return f"Hi {first}, {body}. – AssureVoice Insurance"
+    return f"Hi {first}, {body}. – Ampera BPO"
 
 
 def gemini_message(f: Followup, c: Customer, p: Policy) -> str:

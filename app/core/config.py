@@ -10,10 +10,10 @@ class Settings(BaseSettings):
 
     app_env: Literal["sandbox", "production"] = "sandbox"
     # Payments integration is still pilot: links are built here but nothing is payable yet.
-    payment_link_base: str = "https://pay.sandbox.assurevoice.in/r"
+    payment_link_base: str = "https://pay.sandbox.amperabpo.in/r"
     jwt_secret: str
     seed_password: str
-    database_url: str = "sqlite:///./assurevoice.db"
+    database_url: str = "sqlite:///./amperabpo.db"
     frontend_origin: str = "http://localhost:3000"
     google_api_key: str = ""
     cookie_secure: bool = False

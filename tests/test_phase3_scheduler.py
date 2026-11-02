@@ -31,7 +31,7 @@ def test_due_followups_are_sent_with_template(db):
     db.refresh(due)
     db.refresh(later)
     assert due.status == FollowupStatus.sent and due.sent_at == now
-    assert due.payment_link_url.startswith("https://pay.sandbox.assurevoice.in/")
+    assert due.payment_link_url.startswith("https://pay.sandbox.amperabpo.in/")
     assert due.message_text == fs.template_message(due, db.get(Customer, due.customer_id), db.get(Policy, due.policy_id))
     assert due.payment_link_url in due.message_text and "₹" in due.message_text
     assert later.status == FollowupStatus.scheduled and later.message_text is None
@@ -45,7 +45,7 @@ def test_gemini_used_for_fresh_followups_and_falls_back(db, monkeypatch):
 
     def fake(f, c, p):
         calls.append(f.id)
-        return "Hi from Gemini – AssureVoice Insurance"
+        return "Hi from Gemini – Ampera BPO"
 
     monkeypatch.setattr(fs, "gemini_message", fake)
     old = _followup(db, FollowupKind.reminder, now - timedelta(days=2))  # backlog: template, no Gemini call
@@ -53,7 +53,7 @@ def test_gemini_used_for_fresh_followups_and_falls_back(db, monkeypatch):
     _drain(db, now, fresh.id)
     db.refresh(old)
     db.refresh(fresh)
-    assert fresh.message_text == "Hi from Gemini – AssureVoice Insurance" and old.id not in calls
+    assert fresh.message_text == "Hi from Gemini – Ampera BPO" and old.id not in calls
     assert old.message_text.startswith("Hi ") and old.status == FollowupStatus.sent
 
     def boom(*_):
@@ -63,4 +63,4 @@ def test_gemini_used_for_fresh_followups_and_falls_back(db, monkeypatch):
     failed = _followup(db, FollowupKind.callback, now)
     assert fs.send_due_followups(db, now) == [failed.id]
     db.refresh(failed)
-    assert failed.status == FollowupStatus.sent and failed.message_text.endswith("– AssureVoice Insurance")
+    assert failed.status == FollowupStatus.sent and failed.message_text.endswith("– Ampera BPO")

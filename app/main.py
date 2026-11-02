@@ -35,7 +35,7 @@ def create_app() -> FastAPI:
     s = get_settings()
     prod = s.app_env == "production"
     # No /docs, /redoc or /openapi.json in production; frontend types are generated against sandbox.
-    app = FastAPI(title="AssureVoice AI API", version="1.0.0", lifespan=lifespan,
+    app = FastAPI(title="Ampera BPO API", version="1.0.0", lifespan=lifespan,
                   openapi_url=None if prod else "/openapi.json")
     app.state.session_factory = SessionLocal
     app.state.limiter = limiter

@@ -1,7 +1,7 @@
 # Architecture (backend)
 
 ## 1. System Overview
-FastAPI service that owns all data, business rules, RBAC, masking and audit for AssureVoice AI, plus (from Phase 2) the Pipecat voice agent. The Next.js frontend (`bpo-frontend`) is a separate repo that talks to it only through the OpenAPI contract.
+FastAPI service that owns all data, business rules, RBAC, masking and audit for Ampera BPO, plus (from Phase 2) the Pipecat voice agent. The Next.js frontend (`bpo-frontend`) is a separate repo that talks to it only through the OpenAPI contract.
 
 ## 2. Pattern
 Modular monolith. One process, layered packages. Reason: a sandbox showcase with one team; the voice agent shares the DB and tools with the API.

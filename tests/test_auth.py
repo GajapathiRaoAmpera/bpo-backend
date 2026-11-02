@@ -30,7 +30,7 @@ def test_wrong_password_is_401_and_audited(client, db):
 
 
 def test_unknown_email_is_401(client):
-    r = client.post("/api/v1/auth/login", json={"email": "nobody@sandbox.assurevoice.in", "password": PASSWORD})
+    r = client.post("/api/v1/auth/login", json={"email": "nobody@sandbox.amperabpo.in", "password": PASSWORD})
     assert r.status_code == 401
 
 

@@ -1,6 +1,6 @@
-# AssureVoice AI · Backend
+# Ampera BPO · Backend
 
-FastAPI service for the AssureVoice AI sandbox: data, RBAC, PII masking, audit log, maker-checker and (from Phase 2) the Pipecat + Gemini Live voice agent. All data is synthetic.
+FastAPI service for the Ampera BPO sandbox: data, RBAC, PII masking, audit log, maker-checker and (from Phase 2) the Pipecat + Gemini Live voice agent. All data is synthetic.
 The UI lives in the separate **bpo-frontend** repo; the contract between them is `/openapi.json`.
 
 ## Requirements
@@ -19,13 +19,13 @@ make test      # pytest
 |---|---|
 | `JWT_SECRET` | Signs the session cookie (long random string) |
 | `SEED_PASSWORD` | Password for all 8 personas |
-| `DATABASE_URL` | Default `sqlite:///./assurevoice.db`; PostgreSQL URL works too |
+| `DATABASE_URL` | Default `sqlite:///./amperabpo.db`; PostgreSQL URL works too |
 | `FRONTEND_ORIGIN` | CORS allow-list, default `http://localhost:3000` |
 | `COOKIE_SECURE` | `true` behind HTTPS |
 | `GOOGLE_API_KEY` | Gemini Live voice agent and Gemini Flash post-call analysis |
 | `GEMINI_LIVE_MODEL`, `GEMINI_LIVE_VOICE`, `GEMINI_FLASH_MODEL`, `GEMINI_FLASH_FALLBACK_MODELS` | Optional model overrides (defaults in `.env.example`) |
 
-Docker: `docker build -t assurevoice-backend . && docker run --env-file .env -p 8000:8000 assurevoice-backend` (seeds on first start).
+Docker: `docker build -t amperabpo-backend . && docker run --env-file .env -p 8000:8000 amperabpo-backend` (seeds on first start).
 
 ## Production first admin
 On an empty (migrated) production database, instead of seeding run `BOOTSTRAP_PASSWORD=... poetry run python -m app.bootstrap --email you@insurer.in --name "Your Name" [--title ...]` (omit the env var to be prompted twice). It creates one super_admin (password 12+ characters), the default approved scripts and the integration rows, and does nothing if any user already exists. Add other staff in Admin → Users.
@@ -34,7 +34,7 @@ On an empty (migrated) production database, instead of seeding run `BOOTSTRAP_PA
 `make reset` drops and reseeds everything in ~2 s: 8 personas, 500 customers, ~850 policies (renewals over the next 60 days), 1,200 calls over 30 days with transcripts, summaries and QA scores, plus follow-ups, escalations, campaigns, scripts, audit entries and integrations. Deterministic, with dates relative to today.
 
 ## Persona logins
-Emails `firstname.lastname@sandbox.assurevoice.in`, password `SEED_PASSWORD`. Full table and walkthrough in the bpo-frontend README.
+Emails `firstname.lastname@sandbox.amperabpo.in`, password `SEED_PASSWORD`. Full table and walkthrough in the bpo-frontend README.
 
 **Simulated in Phase 4:** launching a campaign places the next 3 simulated calls (synthetic transcript + AI QA score, `calls.is_simulated = true`); Bot Studio test calls are rule-based text previews of a draft (no model call, nothing saved).
 

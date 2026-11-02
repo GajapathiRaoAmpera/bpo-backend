@@ -45,9 +45,9 @@ def simulate_test_call(prompt: str, customer_says: str) -> dict:
     """Bot studio test call. Simulated: turns are rule-generated from the prompt's pre-check,
     no model is called and no call record is created (draft scripts never reach the bot)."""
     checks = precheck(prompt)
-    opening = ("Hello, this is Vani, an automated AI assistant from AssureVoice Insurance. "
+    opening = ("Hello, this is Vani, an automated AI assistant from Ampera BPO. "
                "This call is recorded for quality and compliance."
-               if checks["ai_disclosure"] else "Hello, this is AssureVoice Insurance.")
+               if checks["ai_disclosure"] else "Hello, this is Ampera BPO.")
     reply = ("I can help with that. To protect your details, please share your policy number and date of birth."
              if checks["verification_before_details"] else "Sure, let me pull up your policy details.")
     return {"checks": checks, "simulated": True,

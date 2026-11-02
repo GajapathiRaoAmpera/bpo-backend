@@ -19,7 +19,7 @@ from app.models.enums import Role  # noqa: E402
 from app.seed import PERSONAS, seed  # noqa: E402
 
 PASSWORD = os.environ["SEED_PASSWORD"]
-EMAILS = {role: f"{n.split()[0].lower()}.{n.split(' ', 1)[1].lower().replace(' ', '')}@sandbox.assurevoice.in"
+EMAILS = {role: f"{n.split()[0].lower()}.{n.split(' ', 1)[1].lower().replace(' ', '')}@sandbox.amperabpo.in"
           for n, role, _ in PERSONAS}
 
 

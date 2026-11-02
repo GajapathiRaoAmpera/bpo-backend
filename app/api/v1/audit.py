@@ -91,6 +91,6 @@ def export_audit(request: Request, f: AuditFilters = Depends(), db: Session = De
             buf.seek(0)
             buf.truncate()
 
-    filename = f"assurevoice-audit-{utcnow().astimezone(IST):%Y%m%d-%H%M}.csv"
+    filename = f"amperabpo-audit-{utcnow().astimezone(IST):%Y%m%d-%H%M}.csv"
     return StreamingResponse(lines(), media_type="text/csv",
                              headers={"Content-Disposition": f'attachment; filename="{filename}"'})

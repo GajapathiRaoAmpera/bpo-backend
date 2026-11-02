@@ -1,6 +1,6 @@
 # AI Coding Agent Instructions (bpo-backend)
 
-**Project:** AssureVoice AI sandbox: FastAPI backend + Pipecat/Gemini voice agent for an Indian insurer's AI contact centre. All data is synthetic. The frontend is a separate repo (`bpo-frontend`); never put frontend code here.
+**Project:** Ampera BPO sandbox: FastAPI backend + Pipecat/Gemini voice agent for an Indian insurer's AI contact centre. All data is synthetic. The frontend is a separate repo (`bpo-frontend`); never put frontend code here.
 
 ## Source of truth (read before significant changes)
 - `docs/PRD.md`: product, roles, screens, phases, definition of done

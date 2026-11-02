@@ -5,7 +5,7 @@ from app.models import AuditLog, User
 from app.models.enums import AuditAction, Role
 
 R = Role
-NEW = {"email": "Nila.Ramesh@sandbox.assurevoice.in", "full_name": "Nila Ramesh",
+NEW = {"email": "Nila.Ramesh@sandbox.amperabpo.in", "full_name": "Nila Ramesh",
        "job_title": "Service Executive", "role": "human_agent", "password": "Fresh@Pass99"}
 
 

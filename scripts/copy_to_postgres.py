@@ -16,7 +16,7 @@ import app.models  # noqa: F401  (registers tables on Base.metadata)
 BATCH = 2000
 
 if __name__ == "__main__":
-    src = create_engine(f"sqlite:///{sys.argv[1] if len(sys.argv) > 1 else 'assurevoice.db'}")
+    src = create_engine(f"sqlite:///{sys.argv[1] if len(sys.argv) > 1 else 'amperabpo.db'}")
     assert engine.dialect.name == "postgresql", "DATABASE_URL must point at Postgres"
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)

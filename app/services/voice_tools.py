@@ -177,7 +177,7 @@ def send_payment_link(db: Session, state: CallState, policy_no: str, created_by:
     url = f"{s.payment_link_base}/{p.policy_no.lower()}-{state.call_id}"
     first = customer.full_name.split()[0]
     text = (f"Hi {first}, here is your secure link to renew {p.policy_no} "
-            f"({format_inr(p.premium_inr)}, due {format_date(p.renewal_date)}): {url} – AssureVoice Insurance")
+            f"({format_inr(p.premium_inr)}, due {format_date(p.renewal_date)}): {url} – Ampera BPO")
     sent_ok = True
     note = ("Sandbox link; no real message or payment." if s.app_env == "sandbox" else
             "Pilot – link not payable and WhatsApp is not live: tell the customer a colleague will share the payment link.")

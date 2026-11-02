@@ -22,7 +22,7 @@ def limited():
 
 def test_sixth_login_from_same_ip_in_a_minute_is_429(client, limited):
     ip = {"X-Forwarded-For": "203.0.113.7, 10.0.0.1"}
-    body = {"email": "nobody@sandbox.assurevoice.in", "password": "wrong"}
+    body = {"email": "nobody@sandbox.amperabpo.in", "password": "wrong"}
     codes = [client.post("/api/v1/auth/login", json=body, headers=ip).status_code for _ in range(6)]
     assert codes == [401] * 5 + [429]
     # A different client IP is unaffected.
@@ -32,7 +32,7 @@ def test_sixth_login_from_same_ip_in_a_minute_is_429(client, limited):
 
 
 def test_locked_email_rejects_even_the_right_password(client, db):
-    email = "lockout.victim@sandbox.assurevoice.in"
+    email = "lockout.victim@sandbox.amperabpo.in"
     db.add(User(email=email, full_name="Lockout Victim", job_title="Agent", role=Role.human_agent,
                 password_hash=hash_password(PASSWORD)))
     db.commit()
