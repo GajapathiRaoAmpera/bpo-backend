@@ -40,7 +40,7 @@ def followup(db):
     c = db.get(Customer, p.customer_id)
     old_code = c.customer_code
     # due_at far in the past so this is always first in line, ahead of any seeded backlog (BATCH=25 limit)
-    f = Followup(policy_id=p.id, customer_id=c.id, kind=FollowupKind.reminder,
+    f = Followup(policy_id=p.id, customer_id=c.id, kind=FollowupKind.payment_link,
                  due_at=utcnow() - timedelta(days=3650), reason="test", status=FollowupStatus.scheduled)
     db.add(f)
     db.commit()
@@ -57,6 +57,16 @@ def test_allowlisted_customer_gets_a_real_whatsapp_send(db, whatsapp_on, followu
     db.refresh(f)
     assert whatsapp_on.call_args.args[0].endswith(f"/{get_settings().whatsapp_phone_number_id}/messages")
     assert f.status == FollowupStatus.sent
+
+
+def test_callback_is_recorded_but_not_sent_with_the_payment_template(db, whatsapp_on, followup):
+    f, c = followup
+    c.customer_code = "TST-0009"
+    f.kind = FollowupKind.callback
+    db.commit()
+    fs.send_due_followups(db, utcnow())
+    db.refresh(f)
+    assert whatsapp_on.call_count == 0 and f.status == FollowupStatus.sent
 
 
 def test_non_allowlisted_customer_is_not_messaged(db, whatsapp_on, followup):

@@ -7,7 +7,8 @@ os.environ.update(JWT_SECRET="test-secret-" + "x" * 40, SEED_PASSWORD="Test@Pass
                   DATABASE_URL=f"sqlite:///{_tmp}/test.db", FRONTEND_ORIGIN="http://localhost:3000",
                   GOOGLE_API_KEY="",  # never call Gemini from tests
                   PLIVO_AUTH_ID="", PLIVO_AUTH_TOKEN="", PLIVO_FROM_NUMBER="", PUBLIC_BASE_URL="",
-                  WHATSAPP_PHONE_NUMBER_ID="", WHATSAPP_ACCESS_TOKEN="", WHATSAPP_TEMPLATE_NAME="",
+                  WHATSAPP_PHONE_NUMBER_ID="", WHATSAPP_ACCESS_TOKEN="", WHATSAPP_TEMPLATE_NAME="", WHATSAPP_TEMPLATE_LANGS="en",
+                  RAZORPAY_KEY_ID="", RAZORPAY_KEY_SECRET="", RAZORPAY_WEBHOOK_SECRET="",
                   CONTACT_ALLOWLIST_PREFIX="")  # never dial/message real phones from tests, whatever .env says
 
 import pytest  # noqa: E402

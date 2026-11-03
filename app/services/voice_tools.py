@@ -1,4 +1,4 @@
-"""The voice agent's five tools as plain DB services (no Pipecat/Gemini here, so they are unit-tested).
+"""The voice agent's tools as plain DB services (no Pipecat/Gemini here, so they are unit-tested).
 
 Guardrails live in code, not only in the prompt: nothing about a policy is returned until
 verify_customer has succeeded for this call, and every figure the bot may speak comes from here.
@@ -18,10 +18,11 @@ from app.core.config import get_settings
 from app.core.db import utcnow
 from app.core.formatting import IST, format_date, format_inr
 from app.core.masking import mask_phone
-from app.models import Call, Customer, Escalation, Followup, Policy, TranscriptTurn
+from app.models import Call, Claim, Customer, Escalation, Followup, Policy, TranscriptTurn
 from app.models.enums import (
-    EscalationStatus, FollowupKind, FollowupStatus, Priority, Speaker,
+    EscalationStatus, FollowupKind, FollowupStatus, Language, Priority, Speaker,
 )
+from app.services.payments import payment_link_for
 from app.services.whatsapp import send_template
 
 log = logging.getLogger(__name__)
@@ -40,6 +41,8 @@ class CallState:
     verify_attempts: int = 0
     actions: list[str] = field(default_factory=list)  # tool names that succeeded
     last_seq: int = 0  # highest transcript seq handed out, including turns not yet committed
+    language: Language | None = None  # chosen on this call via set_language
+    idle_prompts: int = 0  # times the bot re-prompted a silent customer
 
     @property
     def verified(self) -> bool:
@@ -123,7 +126,7 @@ def _record(db: Session, state: CallState, tool: str, text: str, args: dict, res
     return result
 
 
-# --- the five tools ------------------------------------------------------------
+# --- the tools ------------------------------------------------------------
 
 def verify_customer(db: Session, state: CallState, policy_no: str, dob: str) -> dict[str, Any]:
     args = {"policy_no": policy_no, "dob": "provided"}  # never store the spoken DOB in the transcript payload
@@ -174,21 +177,27 @@ def send_payment_link(db: Session, state: CallState, policy_no: str, created_by:
         return _record(db, state, "send_payment_link", "Payment link refused: not verified", args, err)
     customer = db.get(Customer, p.customer_id)
     s = get_settings()
-    url = f"{s.payment_link_base}/{p.policy_no.lower()}-{state.call_id}"
+    try:
+        url = payment_link_for(p, customer, f"{p.policy_no}-{state.call_id}")
+    except Exception as e:
+        log.warning("Payment link creation failed for call %d policy %s: %s", state.call_id, p.policy_no, e)
+        return _record(db, state, "send_payment_link", f"Payment link could not be created for {p.policy_no}",
+                       args, {"ok": False, "error": "The payment system is not responding. Apologise, and offer "
+                                                    "schedule_followup so a colleague sends the link."})
     first = customer.full_name.split()[0]
     text = (f"Hi {first}, here is your secure link to renew {p.policy_no} "
             f"({format_inr(p.premium_inr)}, due {format_date(p.renewal_date)}): {url} – Ampera BPO")
     sent_ok = True
     note = ("Sandbox link; no real message or payment." if s.app_env == "sandbox" else
-            "Pilot – link not payable and WhatsApp is not live: tell the customer a colleague will share the payment link.")
+            "Pilot – WhatsApp is not live: tell the customer a colleague will share the payment link.")
     if s.whatsapp_enabled and (not s.contact_allowlist_prefix
                                 or customer.customer_code.startswith(s.contact_allowlist_prefix)):
         try:
             # shortcut: see followup_scheduler.py, same hello_world-has-no-params exception.
             params = [] if s.whatsapp_template_name == "hello_world" else [first, format_inr(p.premium_inr), url]
-            send_template(customer.phone, params)
+            send_template(customer.phone, params, customer.preferred_language)
             note = ("Sent a WhatsApp connectivity-test message (hello_world); the real payment-link template "
-                    "isn't approved yet." if s.whatsapp_template_name == "hello_world" else "Sent over WhatsApp.")
+                    "isn't configured." if s.whatsapp_template_name == "hello_world" else "Sent over WhatsApp.")
         except Exception as e:
             log.warning("WhatsApp send failed for call %d policy %s: %s", state.call_id, p.policy_no, e)
             sent_ok = False
@@ -204,6 +213,43 @@ def send_payment_link(db: Session, state: CallState, policy_no: str, created_by:
         "ok": sent_ok, "sent_to": f"WhatsApp {mask_phone(customer.phone)}", "amount_spoken": format_inr(p.premium_inr),
         "note": note,
     })
+
+
+def set_language(db: Session, state: CallState, language: str) -> dict[str, Any]:
+    """Records the language the customer chose; saved to their record only once they are verified,
+    so an unverified caller can't change someone else's preference."""
+    args = {"language": language}
+    try:
+        lang = Language((language or "").strip().lower())
+    except ValueError:
+        return {"ok": False, "error": f"Unsupported language. Offer: {', '.join(l.title() for l in Language)}."}
+    state.language = lang
+    if state.verified:
+        db.get(Customer, state.verified_customer_id).preferred_language = lang
+    return _record(db, state, "set_language", f"Language set to {lang.title()}", args,
+                   {"ok": True, "language": lang, "saved_to_record": state.verified})
+
+
+def register_claim(db: Session, state: CallState, policy_no: str, incident_date: str, description: str) -> dict[str, Any]:
+    args = {"policy_no": policy_no, "incident_date": incident_date, "description": description}
+    p, err = _verified_policy(db, state, policy_no)
+    if err:
+        return _record(db, state, "register_claim", "Claim refused: not verified", args, err)
+    when = parse_dob(incident_date)  # same date formats as a DOB
+    today = utcnow().astimezone(IST).date()
+    if when is None or when > today:
+        return {"ok": False, "error": "Ask when the incident happened (a past date) and pass it as YYYY-MM-DD."}
+    if not (description or "").strip():
+        return {"ok": False, "error": "Ask the customer briefly what happened, then try again."}
+    claim = Claim(claim_no="", policy_id=p.id, customer_id=p.customer_id, call_id=state.call_id,
+                  incident_date=when, description=description.strip()[:2000])
+    db.add(claim)
+    db.flush()
+    claim.claim_no = f"CLM-{today.year}-{claim.id:06d}"
+    return _record(db, state, "register_claim", f"Claim registered: {claim.claim_no}", args, {
+        "ok": True, "claim_no": claim.claim_no,
+        "claim_no_spoken": " ".join(claim.claim_no.replace("-", " ")),
+        "next_step": "A claims executive will review it and contact the customer within 2 working days."})
 
 
 def schedule_followup(db: Session, state: CallState, policy_no: str, when: str, reason: str,

@@ -33,11 +33,12 @@ Every schema change needs a migration: change the model, then `poetry run alembi
 | qa_scores | 5-point QA per call | call_id (PK), ai_disclosure, identity_verified, correct_figures, no_mis_selling, polite_close, score, source (ai/human), reviewer_id, reviewer_note, locked_at |
 | escalations | Human hand-offs | call_id, customer_id, policy_id, reason, priority, status, assigned_to, resolved_at, resolution_note |
 | followups | Payment links, callbacks, reminders | policy_id, customer_id, call_id, kind, due_at, reason, status, message_text, payment_link_url, created_by (null = AI), assigned_to, sent_at |
+| claims | Claims registered on calls (no payout here) | claim_no (unique, `CLM-2026-000001`), policy_id, customer_id, call_id, incident_date, description, status (registered/under_review/approved/rejected/settled), created_at, updated_at |
 | audit_log | Append-only audit trail | ts, actor_user_id, actor_role, action, entity_type, entity_id, detail (JSON), ip, user_agent |
 | integrations | Integration cards | key (unique), name, category, status (connected/pilot), description, last_sync_at |
 
 ## 4. Relationships
-customers 1─* policies · customers 1─* calls · policies 1─* calls · calls 1─* transcript_turns · calls 1─1 qa_scores · calls 1─* escalations / followups · campaigns 1─* campaign_targets · scripts 1─* campaigns · scripts → scripts (parent_id, previous version).
+customers 1─* policies · customers 1─* calls · policies 1─* calls · calls 1─* transcript_turns · calls 1─1 qa_scores · calls 1─* escalations / followups / claims · campaigns 1─* campaign_targets · scripts 1─* campaigns · scripts → scripts (parent_id, previous version).
 
 ## 5. Rules
 - **Active script:** latest `approved` script for the mode by `reviewed_at` (`services/scripts.active_script`). Pending/draft scripts are never used by the bot.

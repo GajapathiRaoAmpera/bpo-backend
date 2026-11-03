@@ -13,6 +13,7 @@ from app.models.enums import (
     CallOutcome,
     CallStatus,
     CampaignStatus,
+    ClaimStatus,
     EscalationStatus,
     FollowupKind,
     FollowupStatus,
@@ -208,6 +209,20 @@ class Followup(Base):
     assigned_to: Mapped[int | None] = mapped_column(ForeignKey(FK_USER))
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
     sent_at: Mapped[datetime | None]
+
+
+class Claim(Base):
+    __tablename__ = "claims"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    claim_no: Mapped[str] = mapped_column(String(20), unique=True)
+    policy_id: Mapped[int] = mapped_column(ForeignKey("policies.id"), index=True)
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
+    call_id: Mapped[int | None] = mapped_column(ForeignKey("calls.id"))
+    incident_date: Mapped[date]
+    description: Mapped[str] = mapped_column(Text)
+    status: Mapped[ClaimStatus] = mapped_column(default=ClaimStatus.registered, index=True)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
 
 
 class AuditLog(Base):

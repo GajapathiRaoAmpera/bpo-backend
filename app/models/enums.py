@@ -18,6 +18,9 @@ class Language(StrEnum):
     english = "english"
     tamil = "tamil"
     hindi = "hindi"
+    telugu = "telugu"
+    kannada = "kannada"
+    malayalam = "malayalam"
 
 
 class Product(StrEnum):
@@ -138,6 +141,14 @@ class AuditAction(StrEnum):
     takeover = "takeover"
     call_start = "call_start"
     call_end = "call_end"
+
+
+class ClaimStatus(StrEnum):
+    registered = "registered"
+    under_review = "under_review"
+    approved = "approved"
+    rejected = "rejected"
+    settled = "settled"
 
 
 class IntegrationStatus(StrEnum):

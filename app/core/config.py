@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     app_env: Literal["sandbox", "production"] = "sandbox"
-    # Payments integration is still pilot: links are built here but nothing is payable yet.
+    # Fallback link base when Razorpay isn't configured (sandbox: links are not payable).
     payment_link_base: str = "https://pay.sandbox.amperabpo.in/r"
     jwt_secret: str
     seed_password: str
@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     whatsapp_template_name: str = ""  # must be an approved template in Meta Business Manager
     whatsapp_app_secret: str = ""  # Meta app's Basic Settings; verifies X-Hub-Signature-256 on the webhook
     whatsapp_webhook_verify_token: str = ""  # any string you choose; Meta echoes it back on the GET handshake
+    whatsapp_template_langs: str = "en"  # Meta language codes the template is approved in, e.g. "en,hi,ta"
+
+    # Real payment links (Razorpay; test-mode keys are free). Unset = sandbox links that can't be paid.
+    razorpay_key_id: str = ""
+    razorpay_key_secret: str = ""
+    razorpay_webhook_secret: str = ""  # the secret you typed when adding the webhook in the dashboard
 
     @property
     def plivo_enabled(self) -> bool:
@@ -49,6 +55,10 @@ class Settings(BaseSettings):
     @property
     def whatsapp_enabled(self) -> bool:
         return all((self.whatsapp_phone_number_id, self.whatsapp_access_token, self.whatsapp_template_name))
+
+    @property
+    def razorpay_enabled(self) -> bool:
+        return all((self.razorpay_key_id, self.razorpay_key_secret))
 
     @model_validator(mode="after")
     def _production_guard(self) -> "Settings":

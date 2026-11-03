@@ -27,6 +27,7 @@ class Screen(StrEnum):
     dashboard = "dashboard"
     agent_console = "agent_console"
     escalations = "escalations"
+    claims = "claims"
     live_monitor = "live_monitor"
     calls = "calls"
     customers = "customers"
@@ -48,6 +49,7 @@ MATRIX: dict[Screen, dict[Role, Level]] = {
                        R.campaign_manager: L.view, R.qa_analyst: L.view, R.compliance_officer: L.view},
     Screen.agent_console: {R.team_lead: L.full, R.human_agent: L.full},
     Screen.escalations: {R.team_lead: L.full, R.human_agent: L.full, R.ops_manager: L.view},
+    Screen.claims: {R.team_lead: L.full, R.ops_manager: L.full},
     Screen.live_monitor: {R.team_lead: L.full, R.ops_manager: L.view},
     Screen.calls: {R.ops_manager: L.full, R.team_lead: L.full, R.qa_analyst: L.full, R.human_agent: L.own,
                    R.super_admin: L.view, R.campaign_manager: L.view, R.bot_designer: L.view,

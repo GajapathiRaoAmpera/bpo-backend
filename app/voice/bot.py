@@ -9,6 +9,7 @@ from datetime import datetime
 
 from pipecat.adapters.llm.schemas.function_schema import FunctionSchema
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.frames.frames import LLMRunFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
@@ -30,7 +31,12 @@ from app.voice.session import LiveSession, finalize
 
 log = logging.getLogger(__name__)
 
-LANG_CODE = {Language.english: "en-IN", Language.tamil: "ta-IN", Language.hindi: "hi-IN"}
+LANG_CODE = {Language.english: "en-IN", Language.tamil: "ta-IN", Language.hindi: "hi-IN",
+             Language.telugu: "te-IN", Language.kannada: "kn-IN", Language.malayalam: "ml-IN"}
+LANGUAGES_SPOKEN = ", ".join(lang.title() for lang in Language)
+IDLE_SECS = 7  # silence after the bot stops talking before it re-prompts
+IDLE_REPROMPTS = 2  # then one goodbye, then the call ends
+NO_REPLY_SECS = 5  # customer finished speaking but the bot hasn't started replying: nudge it
 
 _POLICY = {"type": "string", "description": "Policy number as the customer said it, e.g. MOT-2026-001234"}
 TOOL_SPECS: list[tuple[str, str, dict, list[str]]] = [
@@ -50,6 +56,13 @@ TOOL_SPECS: list[tuple[str, str, dict, list[str]]] = [
      {"policy_no": {**_POLICY, "description": "Policy number if known, else empty string"},
       "reason": {"type": "string", "description": "Short reason for escalation"}},
      ["policy_no", "reason"]),
+    ("set_language", "Record the language the customer wants to continue in.",
+     {"language": {"type": "string", "enum": [lang.value for lang in Language]}}, ["language"]),
+    ("register_claim", "Register an insurance claim for a verified customer's policy. Returns the claim number.",
+     {"policy_no": _POLICY,
+      "incident_date": {"type": "string", "description": "When the incident happened, YYYY-MM-DD"},
+      "description": {"type": "string", "description": "What happened and where, in the customer's words"}},
+     ["policy_no", "incident_date", "description"]),
 ]
 
 
@@ -68,7 +81,15 @@ def build_prompt(script: Script, call: Call, customer: Customer | None, policy: 
             "Tool rules:\n- Pass dates of birth as YYYY-MM-DD and callback times as ISO 8601 in IST.\n"
             "- When stating money or dates, use the *_spoken values from tool results exactly.\n"
             "- If a tool returns ok=false, follow its error text.\n"
-            "- Keep replies short; this is a phone call.")
+            "- After calling a tool, say a short filler such as 'one moment, let me check' and do not state any "
+            "result or figure until the tool result arrives.\n"
+            "- Keep replies short; this is a phone call.\n\n"
+            "Language:\n- Right after the disclosure, ask which language they would like to continue in: "
+            f"{LANGUAGES_SPOKEN}. Continue in the one they pick and call set_language. If they switch "
+            "language later, switch immediately and call set_language again.\n\n"
+            "Interruptions and silence:\n- If the customer interrupts, stop, answer what they just said, and do "
+            "not restart your previous sentence.\n- If you only heard noise or a short 'ok' or 'hmm', continue "
+            "from where you stopped.\n- Never stay silent: every customer turn gets a reply.")
 
 
 def _load(session_factory: sessionmaker, call_id: int):
@@ -102,10 +123,13 @@ async def run_bot(transport: BaseTransport, live: LiveSession, session_factory: 
 
         async def handler(params: FunctionCallParams) -> None:
             args = {k: str(v) for k, v in (params.arguments or {}).items()}
+            turns["tools"] += 1
             try:
                 result = await asyncio.to_thread(db_call, fn, **args)
             except TypeError:
                 result = {"ok": False, "error": "Missing or invalid arguments for this tool."}
+            finally:
+                turns["tools"] -= 1
             await params.result_callback(result)
             await notify({"type": "action", "tool": name, "ok": bool(result.get("ok")), "result": result,
                           "at": utcnow().isoformat()})
@@ -116,8 +140,8 @@ async def run_bot(transport: BaseTransport, live: LiveSession, session_factory: 
 
         return handler
 
-    tools = [FunctionSchema(name=n, description=d, properties=p, required=r, handler=make_handler(n))
-             for n, d, p, r in TOOL_SPECS]
+    turns = {"user": 0, "bot": 0, "tools": 0}  # counters for the no-reply check
+    tools = [FunctionSchema(name=n, description=d, properties=p, required=r) for n, d, p, r in TOOL_SPECS]
     language = LANG_CODE.get(customer.preferred_language, "en-IN") if customer else "en-IN"
     llm = GeminiLiveLLMService(
         api_key=s.google_api_key,
@@ -126,9 +150,54 @@ async def run_bot(transport: BaseTransport, live: LiveSession, session_factory: 
                                                language=language),
         tools=tools,
     )
+    # Registered before the call connects, so Gemini is told these tools are NON_BLOCKING. A tool the
+    # customer talks over then still finishes; with the default (cancel on interruption) Gemini waited
+    # for a function response that never came. Registering after connect (FunctionSchema handlers)
+    # declared them BLOCKING while pipecat treated them as async, and the call froze.
+    for name, *_ in TOOL_SPECS:
+        llm.register_function(name, make_handler(name), cancel_on_interruption=False, timeout_secs=20)
     context = LLMContext()
     user_agg, assistant_agg = LLMContextAggregatorPair(
-        context, user_params=LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer()))
+        context, user_params=LLMUserAggregatorParams(
+            vad_analyzer=SileroVADAnalyzer(params=VADParams(confidence=0.75, start_secs=0.3, min_volume=0.7)
+                                           if phone else None),
+            user_idle_timeout=IDLE_SECS))
+
+    @user_agg.event_handler("on_user_turn_idle")
+    async def _idle(_agg) -> None:
+        # Safety net for any lost turn: re-prompt twice, then say goodbye, then end the call.
+        state.idle_prompts += 1
+        if state.idle_prompts > IDLE_REPROMPTS + 1:
+            await runner.cancel()
+            return
+        note = ("The customer has gone quiet or may not have heard you. Briefly repeat your last question, or "
+                "ask if they are still there, in the language you are speaking."
+                if state.idle_prompts <= IDLE_REPROMPTS else
+                "The customer is still silent. Say you will end the call now, that they can call back any time, "
+                "thank them, and say goodbye. Do not ask anything else.")
+        context.add_message({"role": "developer", "content": note})
+        await worker.queue_frames([LLMRunFrame()])
+
+    @user_agg.event_handler("on_user_turn_started")
+    async def _user_started(*_) -> None:
+        turns["user"] += 1
+
+    @assistant_agg.event_handler("on_assistant_turn_started")
+    async def _bot_started(*_) -> None:
+        turns["bot"] += 1
+
+    @user_agg.event_handler("on_user_turn_stopped")
+    async def _user_stopped(*_) -> None:
+        # The customer finished speaking. If the bot neither replies nor runs a tool within a few
+        # seconds (and the customer hasn't spoken again), the turn was lost: ask the model to answer.
+        seen = (turns["user"], turns["bot"])
+        await asyncio.sleep(NO_REPLY_SECS)
+        if (turns["user"], turns["bot"]) == seen and not turns["tools"] and worker is not None:
+            log.warning("Call %s: no reply %ss after the customer spoke, nudging the bot", state.call_id, NO_REPLY_SECS)
+            context.add_message({"role": "developer", "content":
+                                 "The customer just spoke and you have not replied. Reply now to what they "
+                                 "said; if you did not catch it, ask them to repeat."})
+            await worker.queue_frames([LLMRunFrame()])
 
     def save_turn(speaker: Speaker, text: str, at: datetime | None = None) -> None:
         with session_factory() as db:
@@ -144,6 +213,7 @@ async def run_bot(transport: BaseTransport, live: LiveSession, session_factory: 
 
     @user_agg.event_handler("on_user_turn_message_added")
     async def _user_turn(_agg, message) -> None:
+        state.idle_prompts = 0  # they spoke: the silence count starts over
         # Realtime mode finalises the user's words when the bot starts replying (after any tool
         # calls), so record when the user started speaking to keep the transcript in order.
         if message.content and message.content.strip():

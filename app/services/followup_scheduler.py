@@ -17,6 +17,7 @@ from app.core.db import utcnow
 from app.core.formatting import format_date, format_inr
 from app.models import Customer, Followup, Policy
 from app.models.enums import FollowupKind, FollowupStatus
+from app.services.payments import payment_link_for
 from app.services.whatsapp import send_template
 
 log = logging.getLogger(__name__)
@@ -79,7 +80,11 @@ def send_due_followups(db: Session, now: datetime | None = None) -> list[int]:
     for f in due:
         p, c = db.get(Policy, f.policy_id), db.get(Customer, f.customer_id)
         if f.kind == FollowupKind.payment_link and not f.payment_link_url:
-            f.payment_link_url = f"{s.payment_link_base}/{p.policy_no.lower()}-f{f.id}"
+            try:
+                f.payment_link_url = payment_link_for(p, c, f"{p.policy_no}-f{f.id}")
+            except Exception as e:  # Razorpay/network error: leave it due, the next run retries
+                log.warning("Payment link creation failed for followup %d: %s", f.id, e)
+                continue
         text = None
         # Only fresh follow-ups use Gemini: the seeded backlog would burn the Flash quota post-call analysis needs.
         if use_ai and now - f.due_at <= AI_FRESHNESS:
@@ -89,14 +94,16 @@ def send_due_followups(db: Session, now: datetime | None = None) -> list[int]:
                 log.warning("Gemini follow-up message failed, using template: %s", e)
                 use_ai = False
         f.message_text = text or template_message(f, c, p)
-        if s.whatsapp_enabled and (not s.contact_allowlist_prefix
-                                    or c.customer_code.startswith(s.contact_allowlist_prefix)):
+        # The approved template is the payment-link one ({{3}} = link): callbacks and reminders would send
+        # an empty {{3}}, which Meta rejects. shortcut: they are recorded only; add their own template to send them.
+        if s.whatsapp_enabled and (f.kind == FollowupKind.payment_link or s.whatsapp_template_name == "hello_world") \
+                and (not s.contact_allowlist_prefix or c.customer_code.startswith(s.contact_allowlist_prefix)):
             try:
                 # shortcut: Meta's "hello_world" connectivity-test template takes no parameters; any real
                 # approved template takes the 3 below. Upgrade when more than one real template is needed.
                 params = [] if s.whatsapp_template_name == "hello_world" else [
                     c.full_name.split()[0], format_inr(p.premium_inr), f.payment_link_url or ""]
-                send_template(c.phone, params)
+                send_template(c.phone, params, c.preferred_language)
             except Exception as e:  # Meta/network error: leave it due, the next run retries
                 log.warning("WhatsApp send failed for followup %d: %s", f.id, e)
                 db.commit()  # keep the stored message_text/payment_link_url, just don't mark it sent
