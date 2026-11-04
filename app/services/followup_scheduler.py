@@ -68,6 +68,19 @@ def gemini_message(f: Followup, c: Customer, p: Policy) -> str:
     return text[:600]
 
 
+def whatsapp_template(f: Followup, c: Customer, p: Policy, s) -> tuple[str, list[str]]:
+    """(approved template name, body params) for this follow-up's kind; name "" = record only, don't send.
+    Param order must match the {{n}} placeholders of the templates registered in Meta."""
+    first = c.full_name.split()[0]
+    if s.whatsapp_template_name == "hello_world":  # Meta's no-param connectivity test: send every kind with it
+        return s.whatsapp_template_name, []
+    if f.kind == FollowupKind.payment_link:
+        return s.whatsapp_template_name, [first, format_inr(p.premium_inr), f.payment_link_url or ""]
+    if f.kind == FollowupKind.callback:
+        return s.whatsapp_callback_template, [first, p.policy_no]
+    return s.whatsapp_reminder_template, [first, p.policy_no, format_inr(p.premium_inr), format_date(p.renewal_date)]
+
+
 def send_due_followups(db: Session, now: datetime | None = None) -> list[int]:
     """Marks due scheduled follow-ups as sent (sandbox: the message is stored, never delivered).
     Gemini Flash writes the text when a key is set, else (or on any failure) the deterministic template."""
@@ -94,16 +107,11 @@ def send_due_followups(db: Session, now: datetime | None = None) -> list[int]:
                 log.warning("Gemini follow-up message failed, using template: %s", e)
                 use_ai = False
         f.message_text = text or template_message(f, c, p)
-        # The approved template is the payment-link one ({{3}} = link): callbacks and reminders would send
-        # an empty {{3}}, which Meta rejects. shortcut: they are recorded only; add their own template to send them.
-        if s.whatsapp_enabled and (f.kind == FollowupKind.payment_link or s.whatsapp_template_name == "hello_world") \
+        template, params = whatsapp_template(f, c, p, s) if s.whatsapp_enabled else ("", [])
+        if template \
                 and (not s.contact_allowlist_prefix or c.customer_code.startswith(s.contact_allowlist_prefix)):
             try:
-                # shortcut: Meta's "hello_world" connectivity-test template takes no parameters; any real
-                # approved template takes the 3 below. Upgrade when more than one real template is needed.
-                params = [] if s.whatsapp_template_name == "hello_world" else [
-                    c.full_name.split()[0], format_inr(p.premium_inr), f.payment_link_url or ""]
-                send_template(c.phone, params, c.preferred_language)
+                send_template(c.phone, params, c.preferred_language, name=template)
             except Exception as e:  # Meta/network error: leave it due, the next run retries
                 log.warning("WhatsApp send failed for followup %d: %s", f.id, e)
                 db.commit()  # keep the stored message_text/payment_link_url, just don't mark it sent

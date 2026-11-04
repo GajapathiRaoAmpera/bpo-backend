@@ -33,13 +33,15 @@ def template_lang(language: Language | str | None) -> str:
     return code if code in {c.strip() for c in s.whatsapp_template_langs.split(",")} else "en"
 
 
-def send_template(phone: str, params: list[str], language: Language | str | None = None) -> None:
+def send_template(phone: str, params: list[str], language: Language | str | None = None,
+                  name: str | None = None) -> None:
     """Sends the configured approved template to `phone` (Indian 10-digit number). Raises on any failure;
     callers decide whether to retry. `params` fill the template's body placeholders in order; pass [] for a
-    template with none (e.g. Meta's "hello_world" connectivity test)."""
+    template with none (e.g. Meta's "hello_world" connectivity test). `name` defaults to the payment-link
+    template (WHATSAPP_TEMPLATE_NAME)."""
     s = get_settings()
     body = {"messaging_product": "whatsapp", "to": _to(phone), "type": "template",
-            "template": {"name": s.whatsapp_template_name, "language": {"code": template_lang(language)}}}
+            "template": {"name": name or s.whatsapp_template_name, "language": {"code": template_lang(language)}}}
     if params:
         body["template"]["components"] = [
             {"type": "body", "parameters": [{"type": "text", "text": p} for p in params]}]

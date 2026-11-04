@@ -59,7 +59,7 @@ def test_allowlisted_customer_gets_a_real_whatsapp_send(db, whatsapp_on, followu
     assert f.status == FollowupStatus.sent
 
 
-def test_callback_is_recorded_but_not_sent_with_the_payment_template(db, whatsapp_on, followup):
+def test_callback_is_recorded_but_not_sent_without_its_own_template(db, whatsapp_on, followup):
     f, c = followup
     c.customer_code = "TST-0009"
     f.kind = FollowupKind.callback
@@ -67,6 +67,23 @@ def test_callback_is_recorded_but_not_sent_with_the_payment_template(db, whatsap
     fs.send_due_followups(db, utcnow())
     db.refresh(f)
     assert whatsapp_on.call_count == 0 and f.status == FollowupStatus.sent
+
+
+@pytest.mark.parametrize("kind,env,n_params", [(FollowupKind.callback, "WHATSAPP_CALLBACK_TEMPLATE", 2),
+                                                (FollowupKind.reminder, "WHATSAPP_REMINDER_TEMPLATE", 4)])
+def test_callback_and_reminder_send_with_their_own_template(db, whatsapp_on, followup, monkeypatch,
+                                                            kind, env, n_params):
+    monkeypatch.setenv(env, "my_template")
+    get_settings.cache_clear()
+    f, c = followup
+    c.customer_code = "TST-0010"
+    f.kind = kind
+    db.commit()
+    fs.send_due_followups(db, utcnow())
+    db.refresh(f)
+    tpl = whatsapp_on.call_args.kwargs["json"]["template"]
+    assert tpl["name"] == "my_template" and f.status == FollowupStatus.sent
+    assert len(tpl["components"][0]["parameters"]) == n_params
 
 
 def test_non_allowlisted_customer_is_not_messaged(db, whatsapp_on, followup):

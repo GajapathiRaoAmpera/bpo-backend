@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     whatsapp_phone_number_id: str = ""
     whatsapp_access_token: str = ""
     whatsapp_template_name: str = ""  # must be an approved template in Meta Business Manager
+    whatsapp_callback_template: str = ""  # approved template for callback follow-ups; unset = recorded only
+    whatsapp_reminder_template: str = ""  # approved template for renewal reminders; unset = recorded only
     whatsapp_app_secret: str = ""  # Meta app's Basic Settings; verifies X-Hub-Signature-256 on the webhook
     whatsapp_webhook_verify_token: str = ""  # any string you choose; Meta echoes it back on the GET handshake
     whatsapp_template_langs: str = "en"  # Meta language codes the template is approved in, e.g. "en,hi,ta"
