@@ -7,6 +7,7 @@ signed answer webhook put in its URL. Anything else is rejected."""
 import secrets
 from urllib.parse import parse_qsl
 
+import plivo
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, WebSocket
 from plivo import plivoxml
 from plivo.utils.signature_v3 import validate_v3_signature
@@ -26,7 +27,7 @@ router = APIRouter(prefix="/telephony/plivo", tags=["telephony"])
 _STREAM_TOKENS: dict[int, str] = {}
 
 
-async def _verified(request: Request) -> None:
+async def _verified(request: Request) -> dict:
     s = get_settings()
     sig = request.headers.get("X-Plivo-Signature-V3", "")
     nonce = request.headers.get("X-Plivo-Signature-V3-Nonce", "")
@@ -36,6 +37,7 @@ async def _verified(request: Request) -> None:
     if not (s.plivo_enabled and sig and nonce
             and validate_v3_signature("POST", url, nonce, s.plivo_auth_token, sig, params)):
         raise HTTPException(403, "Invalid Plivo signature")
+    return params
 
 
 def _phone_call(db: Session, call_id: int) -> Call:
@@ -48,13 +50,14 @@ def _phone_call(db: Session, call_id: int) -> Call:
 @router.post("/answer/{call_id}")
 async def answer(call_id: int, request: Request, db: Session = Depends(get_db)) -> Response:
     """Customer picked up: tell Plivo to stream the call's audio to our WebSocket."""
-    await _verified(request)
+    params = await _verified(request)
     call = _phone_call(db, call_id)
     if call.campaign_id and call_id not in SESSIONS:  # count each answered call once
         db.get(Campaign, call.campaign_id).connected += 1
         db.commit()
     SESSIONS.setdefault(call_id, LiveSession(state=CallState(call_id=call_id, started_at=call.started_at),
                                              agent_user_id=None))
+    SESSIONS[call_id].plivo_uuid = params.get("CallUUID")
     token = _STREAM_TOKENS[call_id] = secrets.token_urlsafe(24)
     base = get_settings().public_base_url.replace("https://", "wss://", 1)
     xml = plivoxml.ResponseElement().add(plivoxml.StreamElement(
@@ -102,10 +105,33 @@ async def hangup(call_id: int, request: Request, db: Session = Depends(get_db)) 
     if live and live.runner is not None:
         spawn(stop_bot(live))  # run_bot's cleanup finalizes the call
         return {"ok": True}
-    if live is None:  # never answered: no-answer/busy; the next launch retries the target
+    if live is None and call.ended_at is None:  # never answered: no-answer/busy; the next launch retries the target
         target = db.scalar(select(CampaignTarget).where(CampaignTarget.call_id == call_id))
         if target:
             target.status = TargetStatus.failed
             db.commit()
     await finalize(request.app.state.session_factory, call_id)  # idempotent; analysis marks no_answer
     return {"ok": True}
+
+
+def transfer_to_agent(call_id: int, plivo_uuid: str) -> None:
+    """Escalation on a phone call: Plivo stops the bot's audio stream and runs the transfer XML below."""
+    s = get_settings()
+    plivo.RestClient(s.plivo_auth_id, s.plivo_auth_token).calls.update(
+        plivo_uuid, legs="aleg", aleg_url=f"{s.public_base_url}/api/v1/telephony/plivo/transfer/{call_id}",
+        aleg_method="POST")
+
+
+@router.post("/transfer/{call_id}")
+async def transfer(call_id: int, request: Request, db: Session = Depends(get_db)) -> Response:
+    """Rings AGENT_TRANSFER_NUMBER and bridges the customer to that person."""
+    await _verified(request)
+    call = db.get(Call, call_id)
+    s = get_settings()
+    if not call or call.is_simulated or not s.agent_transfer_number:
+        raise HTTPException(404, "Call not found")
+    xml = (plivoxml.ResponseElement()
+           .add(plivoxml.SpeakElement("Connecting you to a service executive. Please hold."))
+           .add(plivoxml.DialElement(caller_id=s.plivo_from_number)
+                .add(plivoxml.NumberElement(s.agent_transfer_number))))
+    return Response(xml.to_string(), media_type="application/xml")

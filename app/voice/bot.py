@@ -27,7 +27,7 @@ from app.core.formatting import IST, format_date
 from app.models import Call, Customer, Policy, Script
 from app.models.enums import CallMode, Language, Speaker
 from app.services import voice_tools
-from app.voice.session import LiveSession, finalize
+from app.voice.session import LiveSession, finalize, spawn
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +37,9 @@ LANGUAGES_SPOKEN = ", ".join(lang.title() for lang in Language)
 IDLE_SECS = 7  # silence after the bot stops talking before it re-prompts
 IDLE_REPROMPTS = 2  # then one goodbye, then the call ends
 NO_REPLY_SECS = 5  # customer finished speaking but the bot hasn't started replying: nudge it
+# shortcut: fixed pause so the bot's "an executive will join" line plays before the transfer cuts its audio;
+# upgrade to waiting for the bot's turn to end if the line gets clipped.
+TRANSFER_DELAY_SECS = 6
 
 _POLICY = {"type": "string", "description": "Policy number as the customer said it, e.g. MOT-2026-001234"}
 TOOL_SPECS: list[tuple[str, str, dict, list[str]]] = [
@@ -137,8 +140,19 @@ async def run_bot(transport: BaseTransport, live: LiveSession, session_factory: 
                 await notify({"type": "verified", "customer_id": state.verified_customer_id})
             if name == "escalate_to_human" and result.get("ok"):
                 await notify({"type": "escalation_requested", "reason": args.get("reason", "")})
+                if phone and live.plivo_uuid and s.agent_transfer_number:
+                    spawn(transfer())
 
         return handler
+
+    async def transfer() -> None:
+        from app.api.v1.telephony import transfer_to_agent  # api layer imports this module
+
+        await asyncio.sleep(TRANSFER_DELAY_SECS)
+        try:
+            await asyncio.to_thread(transfer_to_agent, state.call_id, live.plivo_uuid)
+        except Exception:  # the Escalation row stays open for a person to call back
+            log.exception("Plivo transfer to the agent line failed for call %s", state.call_id)
 
     turns = {"user": 0, "bot": 0, "tools": 0}  # counters for the no-reply check
     tools = [FunctionSchema(name=n, description=d, properties=p, required=r) for n, d, p, r in TOOL_SPECS]

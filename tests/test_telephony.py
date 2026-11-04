@@ -126,3 +126,49 @@ def test_unanswered_call_fails_target_for_retry(client, login, db, plivo_on, cam
     db.expire_all()
     assert db.get(Call, call_id).ended_at is not None
     assert db.scalar(select(CampaignTarget).where(CampaignTarget.call_id == call_id)).status == TargetStatus.failed
+
+
+def test_escalation_transfers_answered_call_to_agent_line(client, login, db, plivo_on, campaign, monkeypatch):
+    monkeypatch.setenv("AGENT_TRANSFER_NUMBER", "919876543210")
+    get_settings.cache_clear()
+    c, _, _ = campaign
+    (call_id,) = login(Role.campaign_manager).post(f"{API}/campaigns/{c.id}/launch").json()["call_ids"]
+    path = f"/api/v1/telephony/plivo/answer/{call_id}"
+    form = {"CallUUID": "uuid-123", "CallStatus": "in-progress"}
+    assert client.post(path, data=form, headers=signed(path, form)).status_code == 200
+    assert SESSIONS[call_id].plivo_uuid == "uuid-123"
+
+    telephony.transfer_to_agent(call_id, "uuid-123")
+    plivo_on.return_value.calls.update.assert_called_once_with(
+        "uuid-123", legs="aleg", aleg_url=f"{BASE}/api/v1/telephony/plivo/transfer/{call_id}", aleg_method="POST")
+
+    path = f"/api/v1/telephony/plivo/transfer/{call_id}"
+    form = {"CallUUID": "uuid-123"}
+    assert client.post(path, data=form).status_code == 403  # unsigned
+    r = client.post(path, data=form, headers=signed(path, form))
+    assert r.status_code == 200 and "<Number>919876543210</Number>" in r.text
+    assert 'callerId="918031234567"' in r.text
+    SESSIONS.pop(call_id, None)
+
+
+def test_transfer_webhook_404_without_agent_number(client, login, plivo_on, campaign, monkeypatch):
+    monkeypatch.setenv("AGENT_TRANSFER_NUMBER", "")  # override any number in the developer's .env
+    get_settings.cache_clear()
+    c, _, _ = campaign
+    (call_id,) = login(Role.campaign_manager).post(f"{API}/campaigns/{c.id}/launch").json()["call_ids"]
+    path = f"/api/v1/telephony/plivo/transfer/{call_id}"
+    assert client.post(path, data={"CallUUID": "x"}, headers=signed(path, {"CallUUID": "x"})).status_code == 404
+
+
+def test_late_hangup_after_call_closed_keeps_target(client, login, db, plivo_on, campaign):
+    """A transferred call ends long after the bot finalised it: don't mark the customer for a redial."""
+    c, _, _ = campaign
+    (call_id,) = login(Role.campaign_manager).post(f"{API}/campaigns/{c.id}/launch").json()["call_ids"]
+    call = db.get(Call, call_id)
+    call.ended_at = call.started_at
+    db.commit()
+    path = f"/api/v1/telephony/plivo/hangup/{call_id}"
+    form = {"CallUUID": "abc", "HangupCause": "NORMAL_HANGUP"}
+    assert client.post(path, data=form, headers=signed(path, form)).status_code == 200
+    db.expire_all()
+    assert db.scalar(select(CampaignTarget).where(CampaignTarget.call_id == call_id)).status == TargetStatus.called

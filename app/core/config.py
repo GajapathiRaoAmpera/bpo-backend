@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     plivo_auth_token: str = ""
     plivo_from_number: str = ""
     public_base_url: str = ""  # backend's public https URL that Plivo calls back, no trailing slash
+    agent_transfer_number: str = ""  # human line that escalated phone calls transfer to, e.g. 919876543210
     contact_allowlist_prefix: str = ""  # e.g. "TST-": only customers whose code starts with it are dialled/messaged
 
     # Real WhatsApp sends (Meta Cloud API). Unset = follow-ups store the message but send nothing.

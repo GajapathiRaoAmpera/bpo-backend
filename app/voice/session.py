@@ -24,6 +24,7 @@ class LiveSession:
     runner: Any = None  # pipecat WorkerRunner while the bot is connected
     worker: Any = None
     taken_over: bool = False
+    plivo_uuid: str | None = None  # Plivo's CallUUID, set when a phone call is answered
 
 
 # shortcut: in-process registry, so one API worker process only; move to Redis/a call service to scale out.
