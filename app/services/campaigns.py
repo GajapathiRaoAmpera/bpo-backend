@@ -113,35 +113,42 @@ def _after_batch(db: Session, c: Campaign) -> None:
     db.commit()
 
 
-def dial(db: Session, c: Campaign) -> list[int]:
-    """Ring up to 3 customers through Plivo. When one answers, Plivo fetches our answer URL and the
-    bot joins over a WebSocket (api/v1/telephony.py); the hangup URL closes the call."""
+def place_call(db: Session, customer: Customer, policy: Policy, campaign_id: int | None = None,
+               script_id: int | None = None) -> Call:
+    """Records a real outbound Call and asks Plivo to ring the customer. When they answer, Plivo fetches our
+    answer URL and the bot joins over a WebSocket (api/v1/telephony.py); the hangup URL closes the call.
+    A Plivo error leaves the call recorded as failed (no answer)."""
     s = get_settings()
-    client = plivo.RestClient(s.plivo_auth_id, s.plivo_auth_token)
     hooks = f"{s.public_base_url}/api/v1/telephony/plivo"
-    script = active_script(db, CallMode.renewal)
     now = utcnow()
     day, seq = _ref_seq(db, now)
+    call = Call(call_ref=f"{day}{seq + 1:04d}", direction=CallDirection.outbound, mode=CallMode.renewal,
+                customer_id=customer.id, policy_id=policy.id, campaign_id=campaign_id, script_id=script_id,
+                status=CallStatus.in_progress, started_at=now, is_simulated=False)
+    db.add(call)
+    db.commit()  # Plivo may request the answer URL as soon as the customer picks up
+    try:
+        plivo.RestClient(s.plivo_auth_id, s.plivo_auth_token).calls.create(
+            from_=s.plivo_from_number, to_="91" + re.sub(r"\D", "", customer.phone)[-10:],
+            answer_url=f"{hooks}/answer/{call.id}", hangup_url=f"{hooks}/hangup/{call.id}")
+    except Exception:  # Plivo/network error: record a failed attempt
+        log.exception("Plivo could not place call %s", call.call_ref)
+        call.status, call.ended_at, call.outcome = CallStatus.failed, utcnow(), CallOutcome.no_answer
+    return call
+
+
+def dial(db: Session, c: Campaign) -> list[int]:
+    """Ring up to 3 customers through Plivo; a failed attempt keeps dialling the rest."""
+    s = get_settings()
+    script = active_script(db, CallMode.renewal)
     call_ids = []
-    for i, t in enumerate(_next_targets(db, c, s.contact_allowlist_prefix)):
+    for t in _next_targets(db, c, s.contact_allowlist_prefix):
         policy = db.get(Policy, t.policy_id)
         customer = db.get(Customer, policy.customer_id)
-        call = Call(call_ref=f"{day}{seq + i + 1:04d}", direction=CallDirection.outbound, mode=CallMode.renewal,
-                    customer_id=customer.id, policy_id=policy.id, campaign_id=c.id,
-                    script_id=script.id if script else c.script_id, status=CallStatus.in_progress,
-                    started_at=now, is_simulated=False)
-        db.add(call)
-        db.flush()
         c.dialled += t.status == TargetStatus.pending
-        t.call_id, t.status = call.id, TargetStatus.called
-        db.commit()  # Plivo may request the answer URL as soon as the customer picks up
-        try:
-            client.calls.create(from_=s.plivo_from_number, to_="91" + re.sub(r"\D", "", customer.phone)[-10:],
-                                answer_url=f"{hooks}/answer/{call.id}", hangup_url=f"{hooks}/hangup/{call.id}")
-        except Exception:  # Plivo/network error: record a failed attempt, keep dialling the rest
-            log.exception("Plivo could not place call %s", call.call_ref)
-            call.status, call.ended_at, call.outcome = CallStatus.failed, utcnow(), CallOutcome.no_answer
-            t.status = TargetStatus.failed
+        call = place_call(db, customer, policy, c.id, script.id if script else c.script_id)
+        t.call_id = call.id
+        t.status = TargetStatus.failed if call.status == CallStatus.failed else TargetStatus.called
         call_ids.append(call.id)
     _after_batch(db, c)
     return call_ids

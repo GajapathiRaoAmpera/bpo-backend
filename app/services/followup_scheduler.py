@@ -1,5 +1,7 @@
-"""Follow-up timer: every 2 minutes, scheduled follow-ups that are due are marked `sent` with a WhatsApp-style
-message. The message is always stored on the follow-up; it is also really sent over WhatsApp when
+"""Follow-up timer: every minute, scheduled follow-ups that are due are marked `sent` with a WhatsApp-style
+message. Callbacks get theirs CALLBACK_HEADS_UP early ("we'll call you shortly"), then at their due time the
+bot rings the customer through Plivo and the callback becomes `done` (dial_due_callbacks).
+The message is always stored on the follow-up; it is also really sent over WhatsApp when
 `whatsapp_enabled` and the customer passes CONTACT_ALLOWLIST_PREFIX (see app.core.config), otherwise it stays
 sandbox-only (stored, never delivered)."""
 
@@ -9,20 +11,25 @@ from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from google import genai
 from google.genai import types
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
 from app.core.db import utcnow
 from app.core.formatting import format_date, format_inr
 from app.models import Customer, Followup, Policy
-from app.models.enums import FollowupKind, FollowupStatus
+from app.models.enums import CallMode, CallStatus, FollowupKind, FollowupStatus
+from app.services.campaigns import place_call
 from app.services.payments import payment_link_for
+from app.services.scripts import active_script
 from app.services.whatsapp import send_template
 
 log = logging.getLogger(__name__)
 
-INTERVAL_MINUTES = 2
+INTERVAL_MINUTES = 1  # callbacks are rung within a minute of the promised time
+CALLBACK_HEADS_UP = timedelta(minutes=5)
+# Callbacks missed by more than this (server was down) are left to a human instead of ringing late.
+CALLBACK_DIAL_WINDOW = timedelta(minutes=30)
 BATCH = 25  # keeps one run short even after a long downtime
 AI_FRESHNESS = timedelta(minutes=30)
 
@@ -87,7 +94,10 @@ def send_due_followups(db: Session, now: datetime | None = None) -> list[int]:
     now = now or utcnow()
     s = get_settings()
     use_ai = bool(s.google_api_key)
-    due = db.scalars(select(Followup).where(Followup.status == FollowupStatus.scheduled, Followup.due_at <= now)
+    due = db.scalars(select(Followup).where(
+        Followup.status == FollowupStatus.scheduled,
+        or_(Followup.due_at <= now,
+            and_(Followup.kind == FollowupKind.callback, Followup.due_at <= now + CALLBACK_HEADS_UP)))
                      .order_by(Followup.due_at).limit(BATCH)).all()
     sent = []
     for f in due:
@@ -122,12 +132,40 @@ def send_due_followups(db: Session, now: datetime | None = None) -> list[int]:
     return sent
 
 
+def dial_due_callbacks(db: Session, now: datetime | None = None) -> list[int]:
+    """Rings customers whose callback time has come (heads-up message already sent) and marks those `done`.
+    Needs Plivo; only allowlisted customers; callbacks missed by over CALLBACK_DIAL_WINDOW stay `sent` for a human."""
+    now = now or utcnow()
+    s = get_settings()
+    if not s.plivo_enabled:
+        return []
+    due = db.scalars(select(Followup).where(
+        Followup.kind == FollowupKind.callback, Followup.status == FollowupStatus.sent,
+        Followup.due_at <= now, Followup.due_at >= now - CALLBACK_DIAL_WINDOW).order_by(Followup.due_at)).all()
+    script = active_script(db, CallMode.renewal)
+    called = []
+    for f in due:
+        c, p = db.get(Customer, f.customer_id), db.get(Policy, f.policy_id)
+        if s.contact_allowlist_prefix and not c.customer_code.startswith(s.contact_allowlist_prefix):
+            continue
+        call = place_call(db, c, p, script_id=script.id if script else None)
+        # One attempt only (no ringing every minute): a failed or unanswered ring shows in Call History.
+        f.status = FollowupStatus.done
+        db.commit()
+        if call.status == CallStatus.failed:
+            log.warning("Callback %d: Plivo could not ring the customer (call %s)", f.id, call.call_ref)
+        called.append(f.id)
+    return called
+
+
 def start_scheduler(session_factory: sessionmaker) -> BackgroundScheduler:
     def job() -> None:
         with session_factory() as db:
             sent = send_due_followups(db)
             if sent:
                 log.info("Follow-up timer sent %d sandbox message(s)", len(sent))
+            if called := dial_due_callbacks(db):
+                log.info("Follow-up timer rang %d callback(s)", len(called))
 
     scheduler = BackgroundScheduler(timezone="UTC")
     scheduler.add_job(job, "interval", minutes=INTERVAL_MINUTES, id="followups", max_instances=1, coalesce=True)

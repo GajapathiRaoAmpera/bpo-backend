@@ -22,6 +22,8 @@ def whatsapp_on(monkeypatch):
     monkeypatch.setenv("WHATSAPP_ACCESS_TOKEN", "test-token")
     monkeypatch.setenv("WHATSAPP_TEMPLATE_NAME", "payment_reminder")
     monkeypatch.setenv("CONTACT_ALLOWLIST_PREFIX", "TST-")
+    for name in ("WHATSAPP_CALLBACK_TEMPLATE", "WHATSAPP_REMINDER_TEMPLATE", "WHATSAPP_CALLBACK_CONFIRM_TEMPLATE"):
+        monkeypatch.setenv(name, "")  # the developer's .env may set these
     get_settings.cache_clear()
     resp = MagicMock(status_code=200)
     post = MagicMock(return_value=resp)
@@ -160,3 +162,67 @@ def test_send_payment_link_reports_a_real_whatsapp_failure(db, whatsapp_on, veri
     assert r["ok"] is False
     f = db.scalars(select(Followup).where(Followup.call_id == state.call_id)).first()
     assert f.status == FollowupStatus.scheduled  # the background timer will retry it
+
+
+# --- Callbacks: confirmation on the call, WhatsApp 5 minutes before, Plivo ring at the promised time ---
+
+@pytest.fixture
+def plivo_rest(monkeypatch):
+    monkeypatch.setenv("PLIVO_AUTH_ID", "MAXXXXXXXXXXXXXXXXXX")
+    monkeypatch.setenv("PLIVO_AUTH_TOKEN", "plivo-test-token")
+    monkeypatch.setenv("PLIVO_FROM_NUMBER", "918031234567")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://av.example.test")
+    get_settings.cache_clear()
+    rest = MagicMock()
+    monkeypatch.setattr("app.services.campaigns.plivo.RestClient", rest)
+    yield rest
+    get_settings.cache_clear()
+
+
+def _drain(db, now):
+    while fs.send_due_followups(db, now):  # seeded backlog goes out in batches of 25
+        pass
+
+
+@pytest.mark.parametrize("minutes_ahead,heads_up_now", [(3, True), (10, False)])
+def test_callback_heads_up_goes_out_5_minutes_early(db, whatsapp_on, followup, minutes_ahead, heads_up_now):
+    f, c = followup
+    c.customer_code = "TST-0011"
+    f.kind, f.due_at = FollowupKind.callback, utcnow() + timedelta(minutes=minutes_ahead)
+    db.commit()
+    _drain(db, utcnow())
+    db.refresh(f)
+    assert (f.status == FollowupStatus.sent) is heads_up_now
+
+
+def test_due_callback_rings_once_and_is_done(db, whatsapp_on, followup, plivo_rest):
+    f, c = followup
+    c.customer_code = "TST-0012"
+    f.kind, f.status, f.due_at = FollowupKind.callback, FollowupStatus.sent, utcnow() - timedelta(minutes=1)
+    db.commit()
+    assert fs.dial_due_callbacks(db, utcnow()) == [f.id]
+    db.refresh(f)
+    assert f.status == FollowupStatus.done
+    assert plivo_rest.return_value.calls.create.call_args.kwargs["to_"] == "91" + c.phone[-10:]
+    assert fs.dial_due_callbacks(db, utcnow()) == []  # never rung twice
+
+
+def test_long_missed_callback_is_not_rung_late(db, whatsapp_on, followup, plivo_rest):
+    f, c = followup
+    c.customer_code = "TST-0013"
+    f.kind, f.status, f.due_at = FollowupKind.callback, FollowupStatus.sent, utcnow() - timedelta(hours=2)
+    db.commit()
+    assert f.id not in fs.dial_due_callbacks(db, utcnow())
+    assert plivo_rest.return_value.calls.create.call_count == 0
+
+
+def test_booking_a_callback_on_the_call_sends_a_confirmation(db, whatsapp_on, verified_call, monkeypatch):
+    monkeypatch.setenv("WHATSAPP_CALLBACK_CONFIRM_TEMPLATE", "renewal_callback_confirmed")
+    get_settings.cache_clear()
+    state, c, p = verified_call
+    c.customer_code = "TST-0014"
+    db.commit()
+    r = vt.schedule_followup(db, state, p.policy_no, "tomorrow 18:00", "wants to talk to family")
+    tpl = whatsapp_on.call_args.kwargs["json"]["template"]
+    assert r["ok"] is True and tpl["name"] == "renewal_callback_confirmed"
+    assert [x["text"] for x in tpl["components"][0]["parameters"]][2] == r["scheduled_for_spoken"]

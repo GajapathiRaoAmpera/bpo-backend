@@ -263,8 +263,17 @@ def schedule_followup(db: Session, state: CallState, policy_no: str, when: str, 
                     due_at=due, reason=(reason or "Customer requested a callback")[:500],
                     status=FollowupStatus.scheduled, created_by=created_by))
     spoken = f"{format_date(due)} at {due.astimezone(IST):%I:%M %p} IST"
+    customer, s = db.get(Customer, p.customer_id), get_settings()
+    if s.whatsapp_enabled and s.whatsapp_callback_confirm_template and (
+            not s.contact_allowlist_prefix or customer.customer_code.startswith(s.contact_allowlist_prefix)):
+        try:  # a failed confirmation must not undo the booked callback
+            send_template(customer.phone, [customer.full_name.split()[0], p.policy_no, spoken],
+                          customer.preferred_language, name=s.whatsapp_callback_confirm_template)
+        except Exception as e:
+            log.warning("Callback confirmation WhatsApp failed for call %d: %s", state.call_id, e)
     return _record(db, state, "schedule_followup", f"Callback scheduled for {spoken}", args,
-                   {"ok": True, "scheduled_for": due.isoformat(), "scheduled_for_spoken": spoken})
+                   {"ok": True, "scheduled_for": due.isoformat(), "scheduled_for_spoken": spoken,
+                    "note": "We will ring the customer at that time and WhatsApp them 5 minutes before."})
 
 
 def escalate_to_human(db: Session, state: CallState, policy_no: str, reason: str) -> dict[str, Any]:
